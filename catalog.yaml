@@ -37,8 +37,12 @@ techniques:
     name: Outbound Tool-Call Exfil
     tactic: EXFIL
     targets: [tool]
-  # Next up (planned — no module yet):
   - id: CUT-LAT-002
     name: Shared-Memory Pivot
     tactic: LAT
     targets: [memory, rag]
+  # Next up (planned — no module yet):
+  - id: CUT-DISC-001
+    name: Post-Access Tool Discovery
+    tactic: DISC
+    targets: [tool, mcp]

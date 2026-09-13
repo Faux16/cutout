@@ -20,6 +20,8 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
+from .memory import MemoryNote, SharedMemory
+
 if TYPE_CHECKING:
     from .corpus import RagCorpus
     from .tool_servers import ToolServer
@@ -162,26 +164,25 @@ class PeerAgent:
         self._servers = servers
         self._tool_index = tool_index
         self._token = delegated_token
+        # Shared memory / blackboard this agent reads on its cycle (CUT-LAT-002 target).
+        self.memory = SharedMemory()
 
-    async def receive(self, message_from: str, text: str) -> A2AResult:
-        result = A2AResult(agent=self.id, message_from=message_from)
-        actions = _parse_actions(text, f"a2a:{message_from}")
-        if actions:
-            result.obeyed_injected = True
+    async def _execute(self, actions: list[PlannedAction]) -> list[dict[str, Any]]:
+        calls: list[dict[str, Any]] = []
         for action in actions:
             if "." in action.tool:
                 server_id, name = action.tool.split(".", 1)
             else:
                 server_id, name = self._tool_index.get(action.tool, ""), action.tool
             if server_id not in self._servers:
-                result.tool_calls.append(
+                calls.append(
                     {"tool": action.tool, "args": action.args, "ok": False, "error": "unknown tool"}
                 )
                 continue
             call = await self._servers[server_id].call(
                 name, dict(action.args), credential=self._token
             )
-            result.tool_calls.append(
+            calls.append(
                 {
                     "tool": f"{server_id}.{name}",
                     "args": action.args,
@@ -191,4 +192,25 @@ class PeerAgent:
                     "error": call.error,
                 }
             )
+        return calls
+
+    async def receive(self, message_from: str, text: str) -> A2AResult:
+        result = A2AResult(agent=self.id, message_from=message_from)
+        actions = _parse_actions(text, f"a2a:{message_from}")
+        result.obeyed_injected = bool(actions)
+        result.tool_calls = await self._execute(actions)
+        return result
+
+    def write_memory(self, author: str, text: str) -> MemoryNote:
+        """Unauthenticated write into the agent's shared memory."""
+        return self.memory.write(author, text)
+
+    async def process_memory(self) -> A2AResult:
+        """Read shared memory and obey any directives found (the peer's own cycle)."""
+        result = A2AResult(agent=self.id, message_from="shared-memory")
+        actions: list[PlannedAction] = []
+        for note in self.memory.read():
+            actions.extend(_parse_actions(note.text, f"shared-memory:{note.id}"))
+        result.obeyed_injected = bool(actions)
+        result.tool_calls = await self._execute(actions)
         return result

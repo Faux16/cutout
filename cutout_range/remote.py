@@ -17,6 +17,7 @@ import httpx
 
 from .agent import A2AResult, OrchestratorResult
 from .corpus import Document
+from .memory import MemoryNote
 from .tool_servers import ToolSpec
 
 _TIMEOUT = httpx.Timeout(15.0)
@@ -95,5 +96,20 @@ class RemoteRange:
                 f"{url.rstrip('/')}/a2a/message",
                 json={"text": message, "message_from": message_from},
             )
+        resp.raise_for_status()
+        return A2AResult.model_validate(resp.json())
+
+    def write_memory(self, to_agent: str, text: str, author: str = "attacker") -> MemoryNote:
+        url = self.agents[to_agent].rstrip("/")
+        resp = httpx.post(
+            f"{url}/memory/write", json={"author": author, "text": text}, timeout=_TIMEOUT
+        )
+        resp.raise_for_status()
+        return MemoryNote.model_validate(resp.json())
+
+    async def process_memory(self, to_agent: str) -> A2AResult:
+        url = self.agents[to_agent].rstrip("/")
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            resp = await client.post(f"{url}/memory/process")
         resp.raise_for_status()
         return A2AResult.model_validate(resp.json())

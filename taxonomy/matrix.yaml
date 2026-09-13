@@ -350,7 +350,7 @@ techniques:
     layer: lateral
     targets: [memory, rag]
     desc: Reach another agent by writing to shared memory it reads.
-    status: planned
+    status: implemented
   - id: CUT-LAT-003
     name: Shared-Queue / Message-Bus Pivot
     tactic: LAT

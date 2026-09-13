@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 
 from cutout_range.agent import A2AResult, OrchestratorResult, _parse_actions
 from cutout_range.corpus import Document, RagCorpus
+from cutout_range.memory import SharedMemory
 from cutout_range.range import _BENIGN_DOCS
 from cutout_range.service import mcp_client
 from cutout_range.service.config import Settings
@@ -43,6 +44,11 @@ class HandleRequest(BaseModel):
 class A2AMessage(BaseModel):
     text: str
     message_from: str = "orchestrator"
+
+
+class MemoryWrite(BaseModel):
+    author: str = "attacker"
+    text: str
 
 
 def _mcp_url(base: str) -> str:
@@ -122,8 +128,9 @@ async def _run_directives(
 
 
 def a2a_agent_app(agent_id: str, tool_servers: dict[str, str], token: str) -> FastAPI:
-    """A peer agent reachable over A2A; obeys directives in inbound messages (the pivot)."""
+    """A peer agent reachable over A2A and via a world-writable shared memory it reads."""
     app = FastAPI(title=f"cutout-range: {agent_id}")
+    memory = SharedMemory()
 
     @app.get("/healthz")
     async def healthz() -> dict[str, Any]:
@@ -135,6 +142,25 @@ def a2a_agent_app(agent_id: str, tool_servers: dict[str, str], token: str) -> Fa
         actions = _parse_actions(msg.text, f"a2a:{msg.message_from}")
         if actions:
             result.obeyed_injected = True
+        result.tool_calls = await _run_directives(actions, tool_servers, token)
+        return result
+
+    @app.get("/memory")
+    async def read_memory() -> dict[str, Any]:
+        return {"notes": [n.model_dump() for n in memory.read()]}
+
+    @app.post("/memory/write")
+    async def write_memory(req: MemoryWrite) -> dict[str, Any]:
+        # Unauthenticated by design — the shared-memory pivot primitive.
+        return memory.write(req.author, req.text).model_dump()
+
+    @app.post("/memory/process")
+    async def process_memory() -> A2AResult:
+        result = A2AResult(agent=agent_id, message_from="shared-memory")
+        actions = []
+        for note in memory.read():
+            actions.extend(_parse_actions(note.text, f"shared-memory:{note.id}"))
+        result.obeyed_injected = bool(actions)
         result.tool_calls = await _run_directives(actions, tool_servers, token)
         return result
 

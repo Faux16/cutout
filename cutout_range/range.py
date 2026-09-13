@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 
 from .agent import A2AResult, Orchestrator, PeerAgent
 from .corpus import Document, RagCorpus
+from .memory import MemoryNote
 from .tool_servers import (
     CustomerDataServer,
     ExternalFetchServer,
@@ -95,6 +96,14 @@ class Range:
         """Deliver an inter-agent message to a peer (the A2A pivot primitive)."""
         agent = self.agents[to_agent]
         return await agent.receive(message_from, message)
+
+    def write_memory(self, to_agent: str, text: str, author: str = "attacker") -> MemoryNote:
+        """Write into a peer's shared memory (the shared-memory pivot primitive)."""
+        return self.agents[to_agent].write_memory(author, text)
+
+    async def process_memory(self, to_agent: str) -> A2AResult:
+        """Drive a peer to consume its shared memory and act on what it finds."""
+        return await self.agents[to_agent].process_memory()
 
 
 _RANGES: dict[str, Range] = {}
