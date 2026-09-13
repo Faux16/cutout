@@ -175,7 +175,7 @@ the RAG/memory state persists server-side between runs.
   JSONL transcript. A run is a recording, not a report; `cutout replay` re-narrates it.
 - **Offline mock provider** — deterministic, so the whole demo runs with zero external calls.
 
-See [CLAUDE.md](CLAUDE.md) for the full architecture and the module contract.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full architecture and the module contract.
 
 ## Development
 
