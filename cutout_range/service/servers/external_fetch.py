@@ -1,8 +1,7 @@
-"""external-fetch tool server (outbound HTTP, mocked/offline)."""
+"""external-fetch MCP server (outbound HTTP, mocked/offline)."""
 
 from __future__ import annotations
 
-from cutout_range.service.apps import tool_server_app
-from cutout_range.tool_servers import ExternalFetchServer
+from cutout_range.service.mcp_servers import external_fetch_server, http_app
 
-app = tool_server_app(ExternalFetchServer())
+app = http_app(external_fetch_server())

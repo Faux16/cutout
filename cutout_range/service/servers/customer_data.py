@@ -1,9 +1,8 @@
-"""customer-data tool server (holds crown-jewel secrets)."""
+"""customer-data MCP server (holds crown-jewel secrets)."""
 
 from __future__ import annotations
 
-from cutout_range.service.apps import tool_server_app
 from cutout_range.service.config import settings
-from cutout_range.tool_servers import CustomerDataServer
+from cutout_range.service.mcp_servers import customer_data_server, http_app
 
-app = tool_server_app(CustomerDataServer(settings.token))
+app = http_app(customer_data_server(settings.token))

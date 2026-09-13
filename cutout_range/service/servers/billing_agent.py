@@ -1,4 +1,4 @@
-"""billing-agent A2A service (obeys inbound peer messages; reaches payments)."""
+"""billing-agent A2A service (MCP client to the payments server)."""
 
 from __future__ import annotations
 
@@ -7,6 +7,6 @@ from cutout_range.service.config import settings
 
 app = a2a_agent_app(
     agent_id="billing-agent",
-    tool_server_urls={"payments": settings.payments_url},
+    tool_servers={"payments": settings.payments_url},
     token=settings.billing_token,
 )

@@ -1,9 +1,8 @@
-"""fs-tools tool server (virtual filesystem with a secret .env)."""
+"""fs-tools MCP server (virtual filesystem with a secret .env)."""
 
 from __future__ import annotations
 
-from cutout_range.service.apps import tool_server_app
 from cutout_range.service.config import settings
-from cutout_range.tool_servers import FilesystemToolServer
+from cutout_range.service.mcp_servers import fs_tools_server, http_app
 
-app = tool_server_app(FilesystemToolServer(settings.token))
+app = http_app(fs_tools_server(settings.token))

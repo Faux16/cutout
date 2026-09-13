@@ -1,9 +1,8 @@
-"""payments tool server (money-moving; billing-agent's trust zone, not host-published)."""
+"""payments MCP server (money-moving; billing-agent's trust zone, not host-published)."""
 
 from __future__ import annotations
 
-from cutout_range.service.apps import tool_server_app
 from cutout_range.service.config import settings
-from cutout_range.tool_servers import PaymentsServer
+from cutout_range.service.mcp_servers import http_app, payments_server
 
-app = tool_server_app(PaymentsServer(settings.billing_token))
+app = http_app(payments_server(settings.billing_token))

@@ -1,11 +1,12 @@
-"""FastAPI app factories for the networked range.
+"""FastAPI app factories for the networked range's agent/corpus services.
 
-Three app shapes:
+The tool servers themselves are real MCP servers (see ``mcp_servers.py``); the services
+here are the parts that are NOT MCP concepts:
 
-* ``tool_server_app`` — wraps a :class:`ToolServer` (MCP-shaped ``/mcp/tools/{list,call}``).
-* ``corpus_app``      — the poisonable RAG corpus (``/corpus/{documents,search,add}``).
-* ``orchestrator_app``— the naive agent; retrieves from the corpus and calls tool servers
-  over HTTP, attaching its delegated token (confused deputy, now across the network).
+* ``corpus_app``       — the poisonable RAG corpus (plain HTTP).
+* ``a2a_agent_app``    — a peer agent reachable over A2A; an MCP *client* to its tools.
+* ``orchestrator_app`` — the naive agent; an MCP *client* to the tool servers, retrieving
+  from the corpus and attaching its delegated token to sensitive calls (confused deputy).
 """
 
 from __future__ import annotations
@@ -19,16 +20,10 @@ from pydantic import BaseModel, Field
 from cutout_range.agent import A2AResult, OrchestratorResult, _parse_actions
 from cutout_range.corpus import Document, RagCorpus
 from cutout_range.range import _BENIGN_DOCS
+from cutout_range.service import mcp_client
 from cutout_range.service.config import Settings
-from cutout_range.tool_servers import ToolResult, ToolServer
 
 _TIMEOUT = httpx.Timeout(15.0)
-
-
-class ToolCallRequest(BaseModel):
-    name: str
-    arguments: dict[str, Any] = Field(default_factory=dict)
-    credential: str | None = None
 
 
 class SearchRequest(BaseModel):
@@ -50,22 +45,8 @@ class A2AMessage(BaseModel):
     message_from: str = "orchestrator"
 
 
-def tool_server_app(server: ToolServer) -> FastAPI:
-    app = FastAPI(title=f"cutout-range: {server.id}")
-
-    @app.get("/healthz")
-    async def healthz() -> dict[str, Any]:
-        return {"ok": True, "server": server.id}
-
-    @app.get("/mcp/tools/list")
-    async def list_tools() -> dict[str, Any]:
-        return {"tools": [s.model_dump() for s in server.list_tools()]}
-
-    @app.post("/mcp/tools/call")
-    async def call_tool(req: ToolCallRequest) -> ToolResult:
-        return await server.call(req.name, req.arguments, credential=req.credential)
-
-    return app
+def _mcp_url(base: str) -> str:
+    return f"{base.rstrip('/')}/mcp"
 
 
 def corpus_app(state_dir: str | None = None) -> FastAPI:
@@ -94,47 +75,59 @@ def corpus_app(state_dir: str | None = None) -> FastAPI:
     return app
 
 
-async def _build_tool_index(settings: Settings, client: httpx.AsyncClient) -> dict[str, str]:
-    """tool name -> server id, discovered from each reachable tool server."""
-    index: dict[str, str] = {}
-    for server_id, url in settings.servers.items():
+async def _tool_index(servers: dict[str, str]) -> dict[str, dict[str, Any]]:
+    """tool name -> {server_id, mcp_url, sensitive}, discovered over MCP."""
+    index: dict[str, dict[str, Any]] = {}
+    for server_id, base in servers.items():
+        url = _mcp_url(base)
         try:
-            resp = await client.get(f"{url}/mcp/tools/list")
-            resp.raise_for_status()
-        except httpx.HTTPError:
+            tools = await mcp_client.list_tools(url)
+        except Exception:
             continue
-        for spec in resp.json()["tools"]:
-            index[spec["name"]] = server_id
+        for tool in tools:
+            index[tool["name"]] = {
+                "server_id": server_id,
+                "mcp_url": url,
+                "sensitive": tool["sensitive"],
+            }
     return index
 
 
-async def _collect_tools(settings: Settings, client: httpx.AsyncClient) -> list[dict[str, Any]]:
-    tools: list[dict[str, Any]] = []
-    for url in settings.servers.values():
-        try:
-            resp = await client.get(f"{url}/mcp/tools/list")
-            resp.raise_for_status()
-        except httpx.HTTPError:
+async def _run_directives(
+    planned: list[Any], servers: dict[str, str], token: str
+) -> list[dict[str, Any]]:
+    """Resolve and execute parsed directives over MCP, injecting the token when sensitive."""
+    index = await _tool_index(servers)
+    calls: list[dict[str, Any]] = []
+    for action in planned:
+        name = action.tool.split(".", 1)[1] if "." in action.tool else action.tool
+        entry = index.get(name)
+        if entry is None:
+            calls.append(
+                {"tool": action.tool, "args": action.args, "ok": False, "error": "unknown tool"}
+            )
             continue
-        tools.extend(resp.json()["tools"])
-    return tools
+        args = dict(action.args)
+        if entry["sensitive"]:
+            # Confused deputy: the agent attaches its own delegated token.
+            args["authorization"] = token
+        env = await mcp_client.call_tool(entry["mcp_url"], name, args)
+        calls.append(
+            {
+                "tool": f"{entry['server_id']}.{name}",
+                "args": action.args,
+                "source": action.source,
+                "ok": env.get("ok", False),
+                "data": env.get("data"),
+                "error": env.get("error"),
+            }
+        )
+    return calls
 
 
-def a2a_agent_app(agent_id: str, tool_server_urls: dict[str, str], token: str) -> FastAPI:
+def a2a_agent_app(agent_id: str, tool_servers: dict[str, str], token: str) -> FastAPI:
     """A peer agent reachable over A2A; obeys directives in inbound messages (the pivot)."""
     app = FastAPI(title=f"cutout-range: {agent_id}")
-
-    async def _tool_index(client: httpx.AsyncClient) -> dict[str, str]:
-        index: dict[str, str] = {}
-        for server_id, url in tool_server_urls.items():
-            try:
-                resp = await client.get(f"{url}/mcp/tools/list")
-                resp.raise_for_status()
-            except httpx.HTTPError:
-                continue
-            for spec in resp.json()["tools"]:
-                index[spec["name"]] = server_id
-        return index
 
     @app.get("/healthz")
     async def healthz() -> dict[str, Any]:
@@ -146,39 +139,7 @@ def a2a_agent_app(agent_id: str, tool_server_urls: dict[str, str], token: str) -
         actions = _parse_actions(msg.text, f"a2a:{msg.message_from}")
         if actions:
             result.obeyed_injected = True
-        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-            index = await _tool_index(client)
-            for action in actions:
-                if "." in action.tool:
-                    server_id, name = action.tool.split(".", 1)
-                else:
-                    server_id, name = index.get(action.tool, ""), action.tool
-                url = tool_server_urls.get(server_id)
-                if not url:
-                    result.tool_calls.append(
-                        {
-                            "tool": action.tool,
-                            "args": action.args,
-                            "ok": False,
-                            "error": "unknown tool",
-                        }
-                    )
-                    continue
-                call = await client.post(
-                    f"{url}/mcp/tools/call",
-                    json={"name": name, "arguments": action.args, "credential": token},
-                )
-                tr = ToolResult.model_validate(call.json())
-                result.tool_calls.append(
-                    {
-                        "tool": f"{server_id}.{name}",
-                        "args": action.args,
-                        "source": action.source,
-                        "ok": tr.ok,
-                        "data": tr.data,
-                        "error": tr.error,
-                    }
-                )
+        result.tool_calls = await _run_directives(actions, tool_servers, token)
         return result
 
     return app
@@ -193,9 +154,13 @@ def orchestrator_app(settings: Settings) -> FastAPI:
 
     @app.get("/topology")
     async def topology() -> dict[str, Any]:
-        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-            tools = await _collect_tools(settings, client)
-        # Advertise client-reachable URLs (host ports under docker).
+        tools: list[dict[str, Any]] = []
+        for server_id, base in settings.servers.items():
+            try:
+                for tool in await mcp_client.list_tools(_mcp_url(base)):
+                    tools.append({"server": server_id, **tool})
+            except Exception:
+                continue
         return {
             "servers": settings.advertised_servers,
             "corpus_url": settings.advertised_corpus_url,
@@ -213,49 +178,17 @@ def orchestrator_app(settings: Settings) -> FastAPI:
             resp.raise_for_status()
             retrieved = [Document.model_validate(d) for d in resp.json()["documents"]]
 
-            result = OrchestratorResult(task=task, answer="", retrieved=[d.id for d in retrieved])
-            planned = _parse_actions(task, "task")
-            for doc in retrieved:
-                doc_actions = _parse_actions(doc.text, f"retrieved-doc:{doc.id}")
-                if doc_actions:
-                    result.obeyed_injected = True
-                    result.injected_sources.append(doc.id)
-                planned.extend(doc_actions)
-            result.planned = planned
+        result = OrchestratorResult(task=task, answer="", retrieved=[d.id for d in retrieved])
+        planned = _parse_actions(task, "task")
+        for doc in retrieved:
+            doc_actions = _parse_actions(doc.text, f"retrieved-doc:{doc.id}")
+            if doc_actions:
+                result.obeyed_injected = True
+                result.injected_sources.append(doc.id)
+            planned.extend(doc_actions)
+        result.planned = planned
 
-            index = await _build_tool_index(settings, client)
-            for action in planned:
-                if "." in action.tool:
-                    server_id, name = action.tool.split(".", 1)
-                else:
-                    server_id, name = index.get(action.tool, ""), action.tool
-                url = settings.servers.get(server_id)
-                if not url:
-                    result.tool_calls.append(
-                        {
-                            "tool": action.tool,
-                            "args": action.args,
-                            "ok": False,
-                            "error": "unknown tool",
-                        }
-                    )
-                    continue
-                # Confused deputy: attach the agent's own delegated token over the wire.
-                call = await client.post(
-                    f"{url}/mcp/tools/call",
-                    json={"name": name, "arguments": action.args, "credential": settings.token},
-                )
-                tr = ToolResult.model_validate(call.json())
-                result.tool_calls.append(
-                    {
-                        "tool": f"{server_id}.{name}",
-                        "args": action.args,
-                        "source": action.source,
-                        "ok": tr.ok,
-                        "data": tr.data,
-                        "error": tr.error,
-                    }
-                )
+        result.tool_calls = await _run_directives(planned, settings.servers, settings.token)
 
         ok_calls = [c for c in result.tool_calls if c["ok"]]
         result.answer = (
