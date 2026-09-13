@@ -26,6 +26,20 @@ def test_use_sets_current_and_prompt(tmp_path: Path) -> None:
     assert con.current is None
 
 
+def test_use_by_index_and_substring(tmp_path: Path) -> None:
+    con = _console(tmp_path)
+    # Index selection requires a prior listing (msfconsole's `use 0`).
+    con.onecmd("search exec")
+    assert con._listing == ["CUT-EXEC-001"]
+    con.onecmd("use 0")
+    assert con.current == "CUT-EXEC-001"
+    # Name/id substring selection, no ID memorization needed.
+    con.onecmd("use inject")
+    assert con.current == "CUT-INJ-002"
+    con.onecmd("use lat")  # matches both LAT modules -> ambiguous, selection unchanged
+    assert con.current == "CUT-INJ-002"
+
+
 def test_unknown_module_is_rejected(tmp_path: Path) -> None:
     con = _console(tmp_path)
     con.onecmd("use CUT-NOPE-999")

@@ -89,6 +89,7 @@ class CutoutConsole(cmd.Cmd):
         self.engine = Engine(session=self.session, writer=self.transcript)
         self.current: str | None = None
         self.opts: dict[str, str] = {}
+        self._listing: list[str] = []  # module ids in the order last shown by list/search
         self._set_prompt()
 
     # ---- prompt / lifecycle ------------------------------------------------
@@ -113,40 +114,82 @@ class CutoutConsole(cmd.Cmd):
         needle = arg.strip().lower()
         registry = get_registry()
         table = Table(title="Modules")
+        table.add_column("#", justify="right", style="dim")
         table.add_column("ID", style="bold cyan")
         table.add_column("Name")
         table.add_column("Tactic", style="magenta")
         table.add_column("Targets", style="green")
+        self._listing = []
         for module_id in sorted(registry):
             spec = ModuleSpec.from_module(registry[module_id])
             hay = f"{spec.id} {spec.name} {spec.tactic}".lower()
             if needle and needle not in hay:
                 continue
-            table.add_row(spec.id, spec.name, spec.tactic, ", ".join(spec.targets))
+            table.add_row(
+                str(len(self._listing)), spec.id, spec.name, spec.tactic, ", ".join(spec.targets)
+            )
+            self._listing.append(spec.id)
         self.console.print(table)
+        self.console.print("[dim]select with 'use <#>', 'use <id>', or 'use <name>'.[/dim]")
 
     def do_search(self, arg: str) -> None:
-        """search <term> — filter modules by substring."""
+        """search <term> — filter modules by substring (then 'use <#>')."""
         self.do_list(arg)
 
+    def _resolve_module(self, query: str) -> str | None:
+        """Resolve a use-target: list index, exact ID, or unique name/tactic substring."""
+        registry = get_registry()
+        # 1) numeric index into the last listing (like msfconsole's `use 0`).
+        if query.isdigit():
+            idx = int(query)
+            if 0 <= idx < len(self._listing):
+                return self._listing[idx]
+            self._err(f"no #{idx} in the last list (run 'list' or 'search' first)")
+            return None
+        # 2) exact ID (case-insensitive).
+        by_id = {mid.lower(): mid for mid in registry}
+        if query.lower() in by_id:
+            return by_id[query.lower()]
+        # 3) unique substring match on id / name / tactic.
+        q = query.lower()
+        matches = [
+            mid
+            for mid in sorted(registry)
+            if q in f"{mid} {registry[mid].name} {registry[mid].tactic}".lower()
+        ]
+        if len(matches) == 1:
+            return matches[0]
+        if not matches:
+            self._err(f"no module matches '{query}' (try 'list')")
+            return None
+        self.console.print(f"[yellow]ambiguous:[/yellow] '{query}' matches {len(matches)}:")
+        for mid in matches:
+            self.console.print(f"  [bold cyan]{mid}[/bold cyan]  {registry[mid].name}")
+        return None
+
     def do_use(self, arg: str) -> None:
-        """use <module_id> — select a module to configure and run."""
-        module_id = arg.strip()
-        if not module_id:
-            self._err("usage: use <module_id>")
+        """use <#|id|name> — select a module by list index, ID, or name substring."""
+        query = arg.strip()
+        if not query:
+            self._err("usage: use <#|id|name>  (see 'list')")
             return
-        try:
-            get_module(module_id)
-        except CutoutError as exc:
-            self._err(str(exc))
+        module_id = self._resolve_module(query)
+        if module_id is None:
             return
         self.current = module_id
         self.opts = {}
         self._set_prompt()
-        self.console.print(f"[dim]using[/dim] [bold cyan]{module_id}[/bold cyan]")
+        name = ModuleSpec.from_module(get_module(module_id)).name
+        self.console.print(f"[dim]using[/dim] [bold cyan]{module_id}[/bold cyan] — {name}")
 
     def complete_use(self, text: str, line: str, begidx: int, endidx: int) -> list[str]:
-        return [mid for mid in sorted(get_registry()) if mid.startswith(text)]
+        low = text.lower()
+        out: list[str] = []
+        for mid in sorted(get_registry()):
+            name = get_registry()[mid].name
+            if mid.lower().startswith(low) or low in name.lower():
+                out.append(mid)
+        return out
 
     def do_back(self, arg: str) -> None:
         """back — deselect the current module."""
