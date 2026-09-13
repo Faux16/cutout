@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 from types import TracebackType
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
@@ -36,6 +36,13 @@ class EvidenceEvent(BaseModel):
     phase: Phase
     action: str
     data: dict[str, Any] = Field(default_factory=dict)
+
+
+@runtime_checkable
+class EvidenceSink(Protocol):
+    """Anything the engine can emit events to (a file writer, a live console buffer)."""
+
+    async def emit(self, event: EvidenceEvent) -> None: ...
 
 
 class EvidenceWriter:

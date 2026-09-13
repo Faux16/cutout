@@ -223,6 +223,15 @@ def catalog(
     console.print(f"[dim]{implemented}/{len(entries)} implemented.[/dim]")
 
 
+@app.command("console")
+def console_cmd() -> None:
+    """Launch the interactive msfconsole-style shell (persistent session state)."""
+
+    from cutout.console import run_console
+
+    run_console()
+
+
 def main() -> None:
     app()
 

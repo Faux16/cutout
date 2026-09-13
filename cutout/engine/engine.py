@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from .errors import CheckMutationError
-from .evidence import EvidenceEvent, EvidenceWriter
+from .evidence import EvidenceEvent, EvidenceSink
 from .provider import MockProvider, Provider
 from .registry import get_module, validate_options
 from .session import CheckResult, ModuleResult, Session
@@ -27,7 +27,7 @@ class Engine:
         self,
         session: Session | None = None,
         provider: Provider | None = None,
-        writer: EvidenceWriter | None = None,
+        writer: EvidenceSink | None = None,
     ) -> None:
         self.session = session or Session()
         self.provider = provider or MockProvider()

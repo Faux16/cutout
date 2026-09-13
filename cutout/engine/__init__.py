@@ -11,7 +11,7 @@ from .errors import (
     ModuleNotRegisteredError,
     OptionError,
 )
-from .evidence import EvidenceEvent, EvidenceWriter, Phase, read_events
+from .evidence import EvidenceEvent, EvidenceSink, EvidenceWriter, Phase, read_events
 from .module import BaseModule, Module, ModuleSpec, Option
 from .provider import MockProvider, Provider
 from .registry import (
@@ -38,6 +38,7 @@ __all__ = [
     "DuplicateModuleError",
     "Engine",
     "EvidenceEvent",
+    "EvidenceSink",
     "EvidenceWriter",
     "MockProvider",
     "Module",
