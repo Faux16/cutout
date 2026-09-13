@@ -76,7 +76,7 @@ def corpus_app(state_dir: str | None = None) -> FastAPI:
 
 
 async def _tool_index(servers: dict[str, str]) -> dict[str, dict[str, Any]]:
-    """tool name -> {server_id, mcp_url, sensitive}, discovered over MCP."""
+    """tool name -> {server_id, mcp_url}, discovered over MCP."""
     index: dict[str, dict[str, Any]] = {}
     for server_id, base in servers.items():
         url = _mcp_url(base)
@@ -85,18 +85,18 @@ async def _tool_index(servers: dict[str, str]) -> dict[str, dict[str, Any]]:
         except Exception:
             continue
         for tool in tools:
-            index[tool["name"]] = {
-                "server_id": server_id,
-                "mcp_url": url,
-                "sensitive": tool["sensitive"],
-            }
+            index[tool["name"]] = {"server_id": server_id, "mcp_url": url}
     return index
 
 
 async def _run_directives(
     planned: list[Any], servers: dict[str, str], token: str
 ) -> list[dict[str, Any]]:
-    """Resolve and execute parsed directives over MCP, injecting the token when sensitive."""
+    """Resolve and execute parsed directives over MCP.
+
+    The agent presents its delegated ``token`` as transport (bearer) auth on every call
+    — the confused deputy — so sensitive tools accept it while a direct caller cannot.
+    """
     index = await _tool_index(servers)
     calls: list[dict[str, Any]] = []
     for action in planned:
@@ -107,11 +107,7 @@ async def _run_directives(
                 {"tool": action.tool, "args": action.args, "ok": False, "error": "unknown tool"}
             )
             continue
-        args = dict(action.args)
-        if entry["sensitive"]:
-            # Confused deputy: the agent attaches its own delegated token.
-            args["authorization"] = token
-        env = await mcp_client.call_tool(entry["mcp_url"], name, args)
+        env = await mcp_client.call_tool(entry["mcp_url"], name, dict(action.args), token=token)
         calls.append(
             {
                 "tool": f"{entry['server_id']}.{name}",

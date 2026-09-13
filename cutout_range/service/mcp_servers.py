@@ -1,13 +1,15 @@
 """Real MCP servers for the range's tool servers (official SDK, streamable-http).
 
 Each tool server is exposed as a genuine MCP server you can point any MCP client at.
-The tool functions are thin wrappers that delegate to the existing ``ToolServer.call``
-logic, so the vulnerability semantics (auth gating, data) live in one place.
+The tool functions delegate to the existing ``ToolServer.call`` logic, so the
+vulnerability semantics (auth gating, data) live in one place.
 
-Delegated authorization is modeled as an ``authorization`` tool argument on sensitive
-tools: the orchestrator/billing-agent fill it from their configured token (confused
-deputy), while a direct caller does not have it. (Real deployments would use transport
-auth; passing a token as a tool arg is itself a teachable anti-pattern.)
+Authorization is **transport-level**: sensitive tools read a bearer token from the
+connection's ``Authorization`` header (via ``Context``) and pass it as the credential.
+The orchestrator/billing-agent present their delegated token on every MCP connection
+(confused deputy); a direct caller without it is denied. Sensitive tools advertise
+``meta={"sensitive": True}`` so recon can flag them without exposing the credential in
+their input schema.
 
 Builders return the ``MCPServer`` (so tests can drive it in-memory); ``http_app`` wraps
 one as a streamable-http ASGI app for uvicorn/docker.
@@ -17,7 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 from starlette.applications import Starlette
 
@@ -31,6 +33,7 @@ from cutout_range.tool_servers import (
 
 # Deliberately permissive: the range is attacked from other hosts/containers.
 _SECURITY = TransportSecuritySettings(enable_dns_rebinding_protection=False)
+_SENSITIVE = {"sensitive": True}
 
 
 def http_app(mcp: MCPServer) -> Starlette:
@@ -39,6 +42,12 @@ def http_app(mcp: MCPServer) -> Starlette:
 
 def _descs(server: ToolServer) -> dict[str, str]:
     return {spec.name: spec.description for spec in server.list_tools()}
+
+
+def _bearer(ctx: Context) -> str | None:
+    """Extract the bearer token from the connection's Authorization header."""
+    raw = (ctx.headers or {}).get("authorization", "") or ""
+    return raw[7:] if raw.lower().startswith("bearer ") else None
 
 
 def customer_data_server(token: str) -> MCPServer:
@@ -54,12 +63,13 @@ def customer_data_server(token: str) -> MCPServer:
 
     @mcp.tool(description=d["get_customer_record"])
     async def get_customer_record(id: str) -> dict[str, Any]:
-        return (await server.call("get_customer_record", {"id": id}, credential=None)).model_dump()
+        res = await server.call("get_customer_record", {"id": id}, credential=None)
+        return res.model_dump()
 
-    @mcp.tool(description=d["get_customer_secret"])
-    async def get_customer_secret(id: str, authorization: str = "") -> dict[str, Any]:
+    @mcp.tool(description=d["get_customer_secret"], meta=_SENSITIVE)
+    async def get_customer_secret(id: str, ctx: Context) -> dict[str, Any]:
         return (
-            await server.call("get_customer_secret", {"id": id}, credential=authorization)
+            await server.call("get_customer_secret", {"id": id}, credential=_bearer(ctx))
         ).model_dump()
 
     return mcp
@@ -74,11 +84,10 @@ def fs_tools_server(token: str) -> MCPServer:
     async def list_files() -> dict[str, Any]:
         return (await server.call("list_files", {}, credential=None)).model_dump()
 
-    @mcp.tool(description=d["read_file"])
-    async def read_file(path: str, authorization: str = "") -> dict[str, Any]:
-        return (
-            await server.call("read_file", {"path": path}, credential=authorization)
-        ).model_dump()
+    @mcp.tool(description=d["read_file"], meta=_SENSITIVE)
+    async def read_file(path: str, ctx: Context) -> dict[str, Any]:
+        res = await server.call("read_file", {"path": path}, credential=_bearer(ctx))
+        return res.model_dump()
 
     return mcp
 
@@ -100,15 +109,13 @@ def payments_server(token: str) -> MCPServer:
     d = _descs(server)
     mcp = MCPServer("payments")
 
-    @mcp.tool(description=d["issue_refund"])
-    async def issue_refund(
-        customer_id: str, amount: str, authorization: str = ""
-    ) -> dict[str, Any]:
+    @mcp.tool(description=d["issue_refund"], meta=_SENSITIVE)
+    async def issue_refund(customer_id: str, amount: str, ctx: Context) -> dict[str, Any]:
         return (
             await server.call(
                 "issue_refund",
                 {"customer_id": customer_id, "amount": amount},
-                credential=authorization,
+                credential=_bearer(ctx),
             )
         ).model_dump()
 
