@@ -51,20 +51,28 @@ class ToolEnumeration(BaseModule):
             session.graph.add_node(node, kind="tool", sensitive=spec.sensitive)
             session.graph.add_edge(spec.server, node, kind="exposes")
 
+        # Discover A2A peer agents (other hosts on the agent "network").
+        agents = list(getattr(rng, "agents", {}))
+        for agent_id in agents:
+            session.graph.add_node(agent_id, kind="agent")
+            session.graph.add_edge("orchestrator", agent_id, kind="a2a")
+
         session.artifacts["tools"] = tools
         session.artifacts["sensitive_tools"] = sensitive
+        session.artifacts["agents"] = agents
 
         await self.emit(
             Phase.RUN,
             "recon.enumerate",
-            {"tool_count": len(tools), "sensitive": sensitive},
+            {"tool_count": len(tools), "sensitive": sensitive, "agents": agents},
         )
+        peers = f"; {len(agents)} peer agent(s)" if agents else ""
         summary = (
             f"enumerated {len(tools)} tools ({len(sensitive)} sensitive) "
-            f"across {len(rng.servers)} servers"
+            f"across {len(rng.servers)} servers{peers}"
         )
         return RunResult(
             status="success",
             summary=summary,
-            data={"tools": tools, "sensitive_tools": sensitive},
+            data={"tools": tools, "sensitive_tools": sensitive, "agents": agents},
         )

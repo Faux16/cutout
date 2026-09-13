@@ -154,6 +154,54 @@ class CutoutConsole(cmd.Cmd):
         self.opts = {}
         self._set_prompt()
 
+    # ---- recon / targets (the nmap-style front half) -----------------------
+    def do_scan(self, arg: str) -> None:
+        """scan — map the target: enumerate servers, tools, and peer agents (like nmap)."""
+        try:
+            result = asyncio.run(self.engine.run("CUT-RECON-001"))
+        except (CutoutError, OptionError) as exc:
+            self._err(str(exc))
+            return
+        self.console.print(f"[green]scan complete[/green] — {result.summary}")
+        self.console.print("[dim]see 'hosts' and 'services'.[/dim]")
+
+    def do_hosts(self, arg: str) -> None:
+        """hosts — discovered hosts on the agent network (orchestrator, MCP servers, agents)."""
+        g = self.session.graph
+        rows = [(n, d.get("kind", "?")) for n, d in g.nodes(data=True) if d.get("kind") != "tool"]
+        if not rows:
+            self.console.print("[dim]no hosts yet — run 'scan' first[/dim]")
+            return
+        table = Table(title="Discovered hosts")
+        table.add_column("Host", style="bold cyan")
+        table.add_column("Kind", style="magenta")
+        table.add_column("Tools", justify="right")
+        for node, kind in sorted(rows, key=lambda r: (r[1], r[0])):
+            edges = g.out_edges(node, data=True)
+            n_tools = sum(1 for _, _, e in edges if e.get("kind") == "exposes")
+            table.add_row(node, kind, str(n_tools) if kind == "mcp" else "-")
+        self.console.print(table)
+
+    def do_services(self, arg: str) -> None:
+        """services — discovered tools across the target (nmap-services style)."""
+        tools = self.session.artifacts.get("tools", [])
+        if not tools:
+            self.console.print("[dim]no services yet — run 'scan' first[/dim]")
+            return
+        table = Table(title="Discovered services (tools)")
+        table.add_column("Server", style="green")
+        table.add_column("Tool", style="bold cyan")
+        table.add_column("Sensitive")
+        table.add_column("Description")
+        for t in tools:
+            table.add_row(
+                t["server"],
+                t["name"],
+                "[red]yes[/red]" if t.get("sensitive") else "no",
+                t.get("description", ""),
+            )
+        self.console.print(table)
+
     def do_info(self, arg: str) -> None:
         """info [module_id] — show module metadata and options."""
         module_id = arg.strip() or self.current

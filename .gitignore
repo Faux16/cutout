@@ -20,6 +20,10 @@ venv/
 .ruff_cache/
 .pytest_cache/
 
+# Local-only demo material (not for publication)
+DEMO.md
+scripts/mcp_auth_demo.py
+
 # Run transcripts
 runs/
 

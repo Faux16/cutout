@@ -53,6 +53,17 @@ def test_chain_accumulates_state_across_commands(tmp_path: Path) -> None:
     con.onecmd("exit")
 
 
+def test_scan_populates_hosts_and_services(tmp_path: Path) -> None:
+    con = _console(tmp_path)
+    con.onecmd("scan")
+    assert con.session.artifacts.get("tools")  # services discovered
+    assert "billing-agent" in con.session.artifacts.get("agents", [])  # peer host found
+    assert con.session.graph.has_node("customer-data")
+    # hosts/services render without error
+    con.onecmd("hosts")
+    con.onecmd("services")
+
+
 def test_set_option_and_target(tmp_path: Path) -> None:
     con = _console(tmp_path)
     con.onecmd("use CUT-INJ-002")
