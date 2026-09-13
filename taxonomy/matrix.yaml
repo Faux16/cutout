@@ -5,6 +5,7 @@
 #   mcp | a2a | rag | memory | tool | instr | human | orchestrator
 # status: planned | implemented
 # layer: which framework module namespace implements it
+# alias: memorable tradecraft codename (on implemented techniques; e.g. "puppet")
 
 meta:
   name: "CTX — Cutout Technique Taxonomy"
@@ -29,6 +30,7 @@ techniques:
   # ---- RECON ----
   - id: CUT-RECON-001
     name: Tool & Schema Enumeration
+    alias: casing
     tactic: RECON
     layer: recon
     targets: [mcp, tool]
@@ -80,6 +82,7 @@ techniques:
     status: planned
   - id: CUT-INJ-002
     name: Indirect Injection via RAG/Document
+    alias: deaddrop
     tactic: INJ
     layer: delivery
     targets: [rag]
@@ -124,6 +127,7 @@ techniques:
   # ---- EXEC ----
   - id: CUT-EXEC-001
     name: Coerced Tool Invocation
+    alias: puppet
     tactic: EXEC
     layer: payloads
     targets: [tool, mcp]
@@ -161,6 +165,7 @@ techniques:
   # ---- PERS (differentiator) ----
   - id: CUT-PERS-001
     name: RAG / Vector-Store Implant
+    alias: sleeper
     tactic: PERS
     layer: persistence
     targets: [rag]
@@ -339,6 +344,7 @@ techniques:
   # ---- LAT ----
   - id: CUT-LAT-001
     name: Agent-to-Agent Propagation
+    alias: courier
     tactic: LAT
     layer: lateral
     targets: [a2a]
@@ -346,6 +352,7 @@ techniques:
     status: implemented
   - id: CUT-LAT-002
     name: Shared-Memory Pivot
+    alias: brushpass
     tactic: LAT
     layer: lateral
     targets: [memory, rag]
@@ -406,6 +413,7 @@ techniques:
   # ---- EXFIL ----
   - id: CUT-EXFIL-001
     name: Outbound Tool-Call Exfil
+    alias: siphon
     tactic: EXFIL
     layer: payloads
     targets: [tool]
