@@ -196,6 +196,11 @@ Cutout is independent security research for **authorized** testing and defense. 
 range is intentionally insecure — do not deploy any part of it. For use against real
 systems, coordinated disclosure, and scope, see [ETHICS.md](ETHICS.md).
 
+## Status & roadmap
+
+Phase 0 complete, Phase 1 underway — engine, console, seven techniques, and the offline +
+networked-MCP range all landed. See [ROADMAP.md](ROADMAP.md).
+
 ## License
 
 Apache-2.0. Vendors adopting the CTX technique IDs is a win, not a leak.

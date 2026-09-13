@@ -5,7 +5,7 @@
 > onto a network.
 
 Target: **Black Hat USA 2027** (Arsenal tool demo + a Briefings talk on the findings).
-Ownership: **personal, independent of any employer.** No company branding, no third-party branding.
+Independent, single-author security research. No third-party branding in the repo.
 
 ---
 
@@ -175,11 +175,8 @@ Kiosk demo, talk, release the findings write-ups alongside.
 
 ## 10. Action items (now)
 
-- [ ] Create GitHub repo `cutout` under personal account (public later; private to start).
-- [ ] (planning note redacted)
-      (redacted)
 - [ ] Draft the full technique matrix (next work item).
-- [ ] Phase 0 scaffolding in Claude Code.
+- [ ] Phase 0 scaffolding.
 - [ ] Defer PyPI/npm names; ship from git.
 
 ## 11. Open decisions

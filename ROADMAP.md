@@ -1,0 +1,57 @@
+# Cutout — Roadmap
+
+Independent security research, building toward **Black Hat USA 2027** (an Arsenal tool demo
+and a Briefings talk on the findings). This is the public roadmap; see
+[ARCHITECTURE.md](ARCHITECTURE.md) for how it's built and
+[`taxonomy/matrix.yaml`](taxonomy/matrix.yaml) for technique-level coverage.
+
+## Where it is now
+
+Phase 0 is complete and Phase 1 is well underway:
+
+- **Engine & CLI** — session, evidence/JSONL, module registry/loader, option validation,
+  deterministic offline provider; Typer + Rich CLI and an msfconsole-style console.
+- **Taxonomy (CTX)** — `taxonomy/matrix.yaml` with a stable ID scheme and per-technique aliases.
+- **Seven techniques**, a full attack chain end to end against the range:
+  `casing` (recon) → `deaddrop` (RAG injection) → `puppet` (coerced tool call / harvest) →
+  `sleeper` (durable implant) → `courier` / `brushpass` (lateral movement) → `siphon` (exfil).
+- **The range, two ways** — an offline in-process stack (zero setup, also the test fixture)
+  and a networked Docker stack whose tool servers are real MCP servers with transport auth.
+- **Quality** — types throughout, `ruff` + `mypy` + `pytest` green in CI.
+
+## Phases
+
+**Phase 0 — Scaffolding** ✅
+Repo, engine, module loader, session, CLI + console, one recon module and one injection
+payload working against a minimal range. Taxonomy v0.1 drafted.
+
+**Phase 1 — Core + range** (in progress)
+A broader module set across all six layers, the complete range (done, incl. the networked
+MCP variant), and replayable evidence (done). Remaining: more techniques per layer and
+publishing the taxonomy as a page alongside the machine-readable YAML. Public repo with a
+strong README + demo.
+
+**Phase 2 — Real findings**
+Run Cutout against shipped agent products / popular MCP servers under authorization.
+Coordinated disclosure; CVEs where they apply. Turn findings into the Briefings abstract.
+
+**Phase 3 — Submit** (Arsenal CFPs historically ~Feb–Apr for an early-August event)
+Submit Arsenal (the tool) and Briefings (the findings). Polish: one-command install, a kiosk
+demo script, a short video.
+
+**Phase 4 — Present**
+Kiosk demo and talk; release the findings write-ups alongside.
+
+## Definition of done (Arsenal-acceptance bar)
+
+- `pipx install` + `docker compose up` + one command runs a full attack chain in minutes.
+- A reviewer can reproduce every demonstrated technique against the bundled range, with no
+  external accounts.
+- A published taxonomy others cite.
+- At least one real-world finding demonstrated by the tool, disclosed responsibly.
+- A clean ethics/scope story so it reads as research — see [ETHICS.md](ETHICS.md).
+
+## Open decisions
+
+- Taxonomy hosting: GitHub Pages vs. a standalone page — decide at publish.
+- Package names (PyPI/npm): deferred; ship from git for now.
