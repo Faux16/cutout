@@ -76,5 +76,6 @@ def test_catalog_marks_implemented_vs_planned() -> None:
     assert entries["CUT-INV-001"].implemented is True
     assert entries["CUT-RECON-001"].implemented is True
     assert entries["CUT-LAT-001"].implemented is True
+    assert entries["CUT-EXFIL-001"].implemented is True
     # A catalog entry with no registered module shows as planned.
-    assert entries["CUT-EXFIL-001"].implemented is False
+    assert entries["CUT-LAT-002"].implemented is False

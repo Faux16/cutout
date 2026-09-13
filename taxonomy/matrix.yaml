@@ -410,7 +410,7 @@ techniques:
     layer: payloads
     targets: [tool]
     desc: Exfil via an outbound HTTP/webhook/email tool.
-    status: planned
+    status: implemented
   - id: CUT-EXFIL-002
     name: Rendered-Markdown / Image Exfil
     tactic: EXFIL
