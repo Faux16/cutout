@@ -13,7 +13,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 
-from cutout_range.range import DELEGATED_TOKEN
+from cutout_range.range import BILLING_TOKEN, DELEGATED_TOKEN
 
 
 def _env(name: str, default: str) -> str:
@@ -23,6 +23,9 @@ def _env(name: str, default: str) -> str:
 @dataclass(frozen=True)
 class Settings:
     token: str = field(default_factory=lambda: _env("CUTOUT_RANGE_TOKEN", DELEGATED_TOKEN))
+    billing_token: str = field(
+        default_factory=lambda: _env("CUTOUT_RANGE_BILLING_TOKEN", BILLING_TOKEN)
+    )
 
     # Internal (orchestrator -> peers).
     customer_data_url: str = field(
@@ -36,6 +39,12 @@ class Settings:
     )
     rag_corpus_url: str = field(
         default_factory=lambda: _env("CUTOUT_RANGE_RAG_CORPUS_URL", "http://127.0.0.1:8614")
+    )
+    payments_url: str = field(
+        default_factory=lambda: _env("CUTOUT_RANGE_PAYMENTS_URL", "http://127.0.0.1:8615")
+    )
+    billing_agent_url: str = field(
+        default_factory=lambda: _env("CUTOUT_RANGE_BILLING_AGENT_URL", "http://127.0.0.1:8616")
     )
     state_dir: str | None = field(
         default_factory=lambda: os.environ.get("CUTOUT_RANGE_STATE_DIR") or None
@@ -66,6 +75,15 @@ class Settings:
     @property
     def advertised_corpus_url(self) -> str:
         return _env("CUTOUT_RANGE_ADVERTISE_RAG_CORPUS_URL", self.rag_corpus_url)
+
+    @property
+    def advertised_agents(self) -> dict[str, str]:
+        """A2A peer agents a client can reach (host ports under docker)."""
+        return {
+            "billing-agent": _env(
+                "CUTOUT_RANGE_ADVERTISE_BILLING_AGENT_URL", self.billing_agent_url
+            )
+        }
 
 
 settings = Settings()

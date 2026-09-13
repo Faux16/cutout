@@ -206,3 +206,44 @@ class ExternalFetchServer(ToolServer):
                 data={"url": url, "status": 200, "body": "[offline-mock] request recorded"},
             )
         return ToolResult(ok=False, tool=tool, error="no such tool")
+
+
+class PaymentsServer(ToolServer):
+    """Money-moving tools, reachable only by the billing-agent (a separate trust zone).
+
+    The orchestrator cannot reach this server — enumerating it and firing ``issue_refund``
+    requires first pivoting to the billing-agent via A2A (CUT-LAT-001 -> impact).
+    """
+
+    id = "payments"
+
+    def __init__(self, billing_token: str) -> None:
+        self._token = billing_token
+        self._refunds: list[dict[str, Any]] = []
+
+    def list_tools(self) -> list[ToolSpec]:
+        return [
+            ToolSpec(
+                server=self.id,
+                name="issue_refund",
+                description="Issue a refund to a customer. Requires billing authorization.",
+                params={"customer_id": "str", "amount": "str"},
+                sensitive=True,
+            ),
+            ToolSpec(
+                server=self.id,
+                name="list_refunds",
+                description="List refunds issued this session.",
+            ),
+        ]
+
+    async def call(self, tool: str, args: dict[str, Any], *, credential: str | None) -> ToolResult:
+        if tool == "list_refunds":
+            return ToolResult(ok=True, tool=tool, data=list(self._refunds))
+        if tool == "issue_refund":
+            if credential != self._token:
+                return ToolResult(ok=False, tool=tool, error="unauthorized: billing token required")
+            refund = {"customer_id": args.get("customer_id"), "amount": args.get("amount")}
+            self._refunds.append(refund)
+            return ToolResult(ok=True, tool=tool, data={"issued": refund})
+        return ToolResult(ok=False, tool=tool, error="no such tool")

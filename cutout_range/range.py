@@ -10,12 +10,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .agent import Orchestrator
+from .agent import A2AResult, Orchestrator, PeerAgent
 from .corpus import Document, RagCorpus
 from .tool_servers import (
     CustomerDataServer,
     ExternalFetchServer,
     FilesystemToolServer,
+    PaymentsServer,
     ToolServer,
     ToolSpec,
 )
@@ -24,6 +25,7 @@ if TYPE_CHECKING:
     from .remote import RemoteRange
 
 DELEGATED_TOKEN = "dgt_orch_7c1f9a2b"
+BILLING_TOKEN = "dgt_billing_3e8d5c10"  # the billing-agent's separate delegated token
 
 _BENIGN_DOCS = [
     Document(
@@ -70,11 +72,29 @@ class Range:
             delegated_token=DELEGATED_TOKEN,
         )
 
+        # A second agent in its own trust zone: the billing-agent, holding a payments
+        # server the orchestrator cannot reach. Only an A2A pivot gets you there.
+        payments = PaymentsServer(BILLING_TOKEN)
+        billing = PeerAgent(
+            agent_id="billing-agent",
+            servers={payments.id: payments},
+            tool_index={spec.name: payments.id for spec in payments.list_tools()},
+            delegated_token=BILLING_TOKEN,
+        )
+        self.agents: dict[str, PeerAgent] = {billing.id: billing}
+
     def list_tools(self) -> list[ToolSpec]:
         specs: list[ToolSpec] = []
         for server in self.servers.values():
             specs.extend(server.list_tools())
         return specs
+
+    async def send_a2a(
+        self, to_agent: str, message: str, message_from: str = "orchestrator"
+    ) -> A2AResult:
+        """Deliver an inter-agent message to a peer (the A2A pivot primitive)."""
+        agent = self.agents[to_agent]
+        return await agent.receive(message_from, message)
 
 
 _RANGES: dict[str, Range] = {}

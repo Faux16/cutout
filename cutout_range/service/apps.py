@@ -16,7 +16,7 @@ import httpx
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
-from cutout_range.agent import OrchestratorResult, _parse_actions
+from cutout_range.agent import A2AResult, OrchestratorResult, _parse_actions
 from cutout_range.corpus import Document, RagCorpus
 from cutout_range.range import _BENIGN_DOCS
 from cutout_range.service.config import Settings
@@ -43,6 +43,11 @@ class AddDocRequest(BaseModel):
 
 class HandleRequest(BaseModel):
     task: str
+
+
+class A2AMessage(BaseModel):
+    text: str
+    message_from: str = "orchestrator"
 
 
 def tool_server_app(server: ToolServer) -> FastAPI:
@@ -115,6 +120,70 @@ async def _collect_tools(settings: Settings, client: httpx.AsyncClient) -> list[
     return tools
 
 
+def a2a_agent_app(agent_id: str, tool_server_urls: dict[str, str], token: str) -> FastAPI:
+    """A peer agent reachable over A2A; obeys directives in inbound messages (the pivot)."""
+    app = FastAPI(title=f"cutout-range: {agent_id}")
+
+    async def _tool_index(client: httpx.AsyncClient) -> dict[str, str]:
+        index: dict[str, str] = {}
+        for server_id, url in tool_server_urls.items():
+            try:
+                resp = await client.get(f"{url}/mcp/tools/list")
+                resp.raise_for_status()
+            except httpx.HTTPError:
+                continue
+            for spec in resp.json()["tools"]:
+                index[spec["name"]] = server_id
+        return index
+
+    @app.get("/healthz")
+    async def healthz() -> dict[str, Any]:
+        return {"ok": True, "agent": agent_id}
+
+    @app.post("/a2a/message")
+    async def message(msg: A2AMessage) -> A2AResult:
+        result = A2AResult(agent=agent_id, message_from=msg.message_from)
+        actions = _parse_actions(msg.text, f"a2a:{msg.message_from}")
+        if actions:
+            result.obeyed_injected = True
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            index = await _tool_index(client)
+            for action in actions:
+                if "." in action.tool:
+                    server_id, name = action.tool.split(".", 1)
+                else:
+                    server_id, name = index.get(action.tool, ""), action.tool
+                url = tool_server_urls.get(server_id)
+                if not url:
+                    result.tool_calls.append(
+                        {
+                            "tool": action.tool,
+                            "args": action.args,
+                            "ok": False,
+                            "error": "unknown tool",
+                        }
+                    )
+                    continue
+                call = await client.post(
+                    f"{url}/mcp/tools/call",
+                    json={"name": name, "arguments": action.args, "credential": token},
+                )
+                tr = ToolResult.model_validate(call.json())
+                result.tool_calls.append(
+                    {
+                        "tool": f"{server_id}.{name}",
+                        "args": action.args,
+                        "source": action.source,
+                        "ok": tr.ok,
+                        "data": tr.data,
+                        "error": tr.error,
+                    }
+                )
+        return result
+
+    return app
+
+
 def orchestrator_app(settings: Settings) -> FastAPI:
     app = FastAPI(title="cutout-range: orchestrator")
 
@@ -130,6 +199,7 @@ def orchestrator_app(settings: Settings) -> FastAPI:
         return {
             "servers": settings.advertised_servers,
             "corpus_url": settings.advertised_corpus_url,
+            "agents": settings.advertised_agents,
             "tools": tools,
         }
 

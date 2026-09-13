@@ -58,6 +58,8 @@ packages = ["cutout", "cutout_range"]
 line-length = 100
 target-version = "py311"
 src = ["cutout", "cutout_range", "tests"]
+# Don't format/lint Python snippets embedded in Markdown docs (e.g. CLAUDE.md).
+extend-exclude = ["*.md"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RUF"]

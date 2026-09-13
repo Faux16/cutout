@@ -15,7 +15,7 @@ from typing import Any
 
 import httpx
 
-from .agent import OrchestratorResult
+from .agent import A2AResult, OrchestratorResult
 from .corpus import Document
 from .tool_servers import ToolSpec
 
@@ -78,9 +78,22 @@ class RemoteRange:
         topo.raise_for_status()
         data = topo.json()
         self.servers: dict[str, str] = dict(data["servers"])  # id -> url (discovered)
+        self.agents: dict[str, str] = dict(data.get("agents", {}))  # A2A peers, id -> url
         self._tools = [ToolSpec.model_validate(t) for t in data["tools"]]
         self.corpus = RemoteCorpus(data["corpus_url"])
         self.orchestrator = RemoteOrchestrator(self.base_url)
 
     def list_tools(self) -> list[ToolSpec]:
         return list(self._tools)
+
+    async def send_a2a(
+        self, to_agent: str, message: str, message_from: str = "orchestrator"
+    ) -> A2AResult:
+        url = self.agents[to_agent]
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            resp = await client.post(
+                f"{url.rstrip('/')}/a2a/message",
+                json={"text": message, "message_from": message_from},
+            )
+        resp.raise_for_status()
+        return A2AResult.model_validate(resp.json())

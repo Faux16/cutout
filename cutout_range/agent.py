@@ -51,6 +51,15 @@ class OrchestratorResult(BaseModel):
     injected_sources: list[str] = Field(default_factory=list)
 
 
+class A2AResult(BaseModel):
+    """Outcome of one inter-agent message delivered to a peer agent."""
+
+    agent: str
+    message_from: str
+    obeyed_injected: bool = False
+    tool_calls: list[dict[str, Any]] = Field(default_factory=list)
+
+
 def _parse_actions(text: str, source: str) -> list[PlannedAction]:
     actions: list[PlannedAction] = []
     for match in _ACTION.finditer(text):
@@ -131,4 +140,55 @@ class Orchestrator:
             )
         else:
             result.answer = "Here is what I found based on our knowledge base."
+        return result
+
+
+class PeerAgent:
+    """A second agent in its own trust zone, reachable via A2A messaging.
+
+    Same fatal flaw as the orchestrator: it treats an inbound peer message as authoritative
+    and obeys any ``ACTION:`` directive in it, using its OWN delegated token. That is what
+    lets a foothold on one agent pivot into another (CUT-LAT-001).
+    """
+
+    def __init__(
+        self,
+        agent_id: str,
+        servers: dict[str, ToolServer],
+        tool_index: dict[str, str],
+        delegated_token: str,
+    ) -> None:
+        self.id = agent_id
+        self._servers = servers
+        self._tool_index = tool_index
+        self._token = delegated_token
+
+    async def receive(self, message_from: str, text: str) -> A2AResult:
+        result = A2AResult(agent=self.id, message_from=message_from)
+        actions = _parse_actions(text, f"a2a:{message_from}")
+        if actions:
+            result.obeyed_injected = True
+        for action in actions:
+            if "." in action.tool:
+                server_id, name = action.tool.split(".", 1)
+            else:
+                server_id, name = self._tool_index.get(action.tool, ""), action.tool
+            if server_id not in self._servers:
+                result.tool_calls.append(
+                    {"tool": action.tool, "args": action.args, "ok": False, "error": "unknown tool"}
+                )
+                continue
+            call = await self._servers[server_id].call(
+                name, dict(action.args), credential=self._token
+            )
+            result.tool_calls.append(
+                {
+                    "tool": f"{server_id}.{name}",
+                    "args": action.args,
+                    "source": action.source,
+                    "ok": call.ok,
+                    "data": call.data,
+                    "error": call.error,
+                }
+            )
         return result

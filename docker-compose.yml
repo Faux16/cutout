@@ -39,19 +39,35 @@ services:
     command: uvicorn cutout_range.service.servers.rag:app --host 0.0.0.0 --port 8614
     ports: ["8614:8614"]
 
+  # payments is deliberately NOT host-published: it lives in the billing-agent's trust
+  # zone and is reachable only by pivoting through the billing-agent (CUT-LAT-001).
+  payments:
+    <<: *image
+    command: uvicorn cutout_range.service.servers.payments:app --host 0.0.0.0 --port 8615
+
+  billing-agent:
+    <<: *image
+    command: uvicorn cutout_range.service.servers.billing_agent:app --host 0.0.0.0 --port 8616
+    ports: ["8616:8616"]
+    depends_on: [payments]
+    environment:
+      CUTOUT_RANGE_PAYMENTS_URL: http://payments:8615
+
   orchestrator:
     <<: *image
     command: uvicorn cutout_range.service.servers.orchestrator:app --host 0.0.0.0 --port 8600
     ports: ["8600:8600"]
-    depends_on: [customer-data, fs-tools, external-fetch, rag-corpus]
+    depends_on: [customer-data, fs-tools, external-fetch, rag-corpus, billing-agent]
     environment:
       # Internal service-DNS URLs the orchestrator uses to reach peers.
       CUTOUT_RANGE_CUSTOMER_DATA_URL: http://customer-data:8611
       CUTOUT_RANGE_FS_TOOLS_URL: http://fs-tools:8612
       CUTOUT_RANGE_EXTERNAL_FETCH_URL: http://external-fetch:8613
       CUTOUT_RANGE_RAG_CORPUS_URL: http://rag-corpus:8614
+      CUTOUT_RANGE_BILLING_AGENT_URL: http://billing-agent:8616
       # Host-reachable URLs advertised to the attacker via /topology.
       CUTOUT_RANGE_ADVERTISE_CUSTOMER_DATA_URL: http://127.0.0.1:8611
       CUTOUT_RANGE_ADVERTISE_FS_TOOLS_URL: http://127.0.0.1:8612
       CUTOUT_RANGE_ADVERTISE_EXTERNAL_FETCH_URL: http://127.0.0.1:8613
       CUTOUT_RANGE_ADVERTISE_RAG_CORPUS_URL: http://127.0.0.1:8614
+      CUTOUT_RANGE_ADVERTISE_BILLING_AGENT_URL: http://127.0.0.1:8616

@@ -343,7 +343,7 @@ techniques:
     layer: lateral
     targets: [a2a]
     desc: Move from one agent to a peer via A2A messaging.
-    status: planned
+    status: implemented
   - id: CUT-LAT-002
     name: Shared-Memory Pivot
     tactic: LAT

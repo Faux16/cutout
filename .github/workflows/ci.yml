@@ -14,20 +14,20 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v5
 
-      - name: Set up Python
-        run: uv python install 3.11
+      - name: Create virtualenv (Python 3.11)
+        run: uv venv --python 3.11
 
-      - name: Install project (with dev extras)
-        run: uv pip install --system -e ".[dev]"
+      - name: Install project (dev + range extras)
+        run: uv pip install -e ".[dev,range]"
 
       - name: Lint (ruff)
-        run: ruff check .
+        run: uv run ruff check .
 
       - name: Format check (ruff)
-        run: ruff format --check .
+        run: uv run ruff format --check .
 
       - name: Type-check (mypy)
-        run: mypy cutout cutout_range
+        run: uv run mypy cutout cutout_range
 
       - name: Test (pytest)
-        run: pytest -q
+        run: uv run pytest -q
