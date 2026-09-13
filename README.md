@@ -92,6 +92,8 @@ provenance-blind agent obeys the instruction hidden in it and exfiltrates a secr
 its own credentials, then the foothold pivots into a second agent's trust zone. `sessions`
 shows the chain, `graph` the discovered topology, `replay` the evidence timeline.
 
+**Full usage — every command, targeting, the CLI, troubleshooting — is in [GUIDE.md](GUIDE.md).**
+
 Every command is one process too, if you prefer:
 
 ```bash

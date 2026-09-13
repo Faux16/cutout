@@ -53,6 +53,30 @@ def _parse_opts(pairs: list[str]) -> dict[str, str]:
     return parsed
 
 
+def _resolve(query: str) -> str:
+    """Resolve a module reference to an ID: exact ID, exact alias, or unique substring."""
+    registry = get_registry()
+    if query in registry:
+        return query
+    low = query.lower()
+    by_id = {mid.lower(): mid for mid in registry}
+    if low in by_id:
+        return by_id[low]
+    by_alias = {registry[m].alias.lower(): m for m in registry if registry[m].alias}
+    if low in by_alias:
+        return by_alias[low]
+    matches = [
+        m
+        for m in sorted(registry)
+        if low in f"{m} {registry[m].alias} {registry[m].name} {registry[m].tactic}".lower()
+    ]
+    if len(matches) == 1:
+        return matches[0]
+    if not matches:
+        raise typer.BadParameter(f"no module matches '{query}' (try 'cutout list')")
+    raise typer.BadParameter(f"'{query}' is ambiguous: {', '.join(matches)}")
+
+
 @app.command("list")
 def list_modules() -> None:
     """List all registered modules."""
@@ -76,7 +100,7 @@ def info(module_id: str = typer.Argument(..., help="Technique ID, e.g. CUT-INV-0
     """Show one module's metadata and declared options."""
 
     try:
-        spec = ModuleSpec.from_module(get_module(module_id))
+        spec = ModuleSpec.from_module(get_module(_resolve(module_id)))
     except CutoutError as exc:
         err_console.print(f"[red]error:[/red] {exc}")
         raise typer.Exit(code=1) from exc
@@ -132,6 +156,7 @@ def run(
 ) -> None:
     """Run a module and write its evidence transcript to JSONL."""
 
+    module_id = _resolve(module_id)  # accept alias / substring / exact ID
     transcript = out or _default_transcript(module_id)
     try:
         options = _parse_opts(opt)
