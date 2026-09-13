@@ -21,9 +21,17 @@ def test_use_sets_current_and_prompt(tmp_path: Path) -> None:
     con = _console(tmp_path)
     con.onecmd("use CUT-RECON-001")
     assert con.current == "CUT-RECON-001"
-    assert "CUT-RECON-001" in con.prompt
+    assert "casing" in con.prompt  # prompt shows the friendly alias
     con.onecmd("back")
     assert con.current is None
+
+
+def test_use_by_alias(tmp_path: Path) -> None:
+    con = _console(tmp_path)
+    con.onecmd("use puppet")
+    assert con.current == "CUT-EXEC-001"
+    con.onecmd("use sleeper")
+    assert con.current == "CUT-PERS-001"
 
 
 def test_use_by_index_and_substring(tmp_path: Path) -> None:

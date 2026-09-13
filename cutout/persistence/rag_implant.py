@@ -19,6 +19,7 @@ from cutout.engine.session import CheckResult, RunResult, Session
 @register
 class RagImplant(BaseModule):
     id = "CUT-PERS-001"
+    alias = "sleeper"
     name = "RAG / Vector-Store Implant"
     tactic = "PERS"
     targets = ["rag"]

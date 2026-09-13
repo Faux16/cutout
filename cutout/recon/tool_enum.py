@@ -18,6 +18,7 @@ from cutout.engine.session import CheckResult, RunResult, Session
 @register
 class ToolEnumeration(BaseModule):
     id = "CUT-RECON-001"
+    alias = "casing"
     name = "Tool & Schema Enumeration"
     tactic = "RECON"
     targets = ["mcp", "tool"]

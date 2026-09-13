@@ -59,13 +59,14 @@ def list_modules() -> None:
 
     registry = get_registry()
     table = Table(title="Registered modules")
-    table.add_column("ID", style="bold cyan")
+    table.add_column("Alias", style="bold yellow")
+    table.add_column("ID", style="cyan")
     table.add_column("Name")
     table.add_column("Tactic", style="magenta")
     table.add_column("Targets", style="green")
     for module_id in sorted(registry):
         spec = ModuleSpec.from_module(registry[module_id])
-        table.add_row(spec.id, spec.name, spec.tactic, ", ".join(spec.targets))
+        table.add_row(spec.alias or "-", spec.id, spec.name, spec.tactic, ", ".join(spec.targets))
     console.print(table)
     console.print(f"[dim]{len(registry)} module(s) registered.[/dim]")
 

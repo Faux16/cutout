@@ -19,6 +19,7 @@ from cutout.engine.session import CheckResult, RunResult, Session
 @register
 class RagInjection(BaseModule):
     id = "CUT-INJ-002"
+    alias = "deaddrop"
     name = "Indirect Injection via RAG/Document"
     tactic = "INJ"
     targets = ["rag"]

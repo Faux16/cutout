@@ -22,6 +22,7 @@ from cutout.engine.session import CheckResult, RunResult, Session
 @register
 class OutboundExfil(BaseModule):
     id = "CUT-EXFIL-001"
+    alias = "siphon"
     name = "Outbound Tool-Call Exfil"
     tactic = "EXFIL"
     targets = ["tool"]

@@ -45,6 +45,7 @@ class Module(Protocol):
 
     id: str
     name: str
+    alias: str
     tactic: str
     targets: list[str]
     options: dict[str, Option]
@@ -63,6 +64,7 @@ class BaseModule:
 
     id: str = ""
     name: str = ""
+    alias: str = ""  # memorable tradecraft codename (e.g. "puppet"); optional
     tactic: str = ""
     targets: list[str] = []
     options: dict[str, Option] = {}
@@ -114,6 +116,7 @@ class ModuleSpec(BaseModel):
 
     id: str
     name: str
+    alias: str = ""
     tactic: str
     targets: list[str] = Field(default_factory=list)
     options: dict[str, Option] = Field(default_factory=dict)
@@ -123,6 +126,7 @@ class ModuleSpec(BaseModel):
         return cls(
             id=module.id,
             name=module.name,
+            alias=module.alias,
             tactic=module.tactic,
             targets=list(module.targets),
             options=dict(module.options),

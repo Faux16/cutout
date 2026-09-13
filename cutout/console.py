@@ -95,7 +95,8 @@ class CutoutConsole(cmd.Cmd):
     # ---- prompt / lifecycle ------------------------------------------------
     def _set_prompt(self) -> None:
         if self.current:
-            self.prompt = f"cutout ({self.current}) > "
+            handle = get_module(self.current).alias or self.current
+            self.prompt = f"cutout ({handle}) > "
         else:
             self.prompt = "cutout > "
 
@@ -115,22 +116,28 @@ class CutoutConsole(cmd.Cmd):
         registry = get_registry()
         table = Table(title="Modules")
         table.add_column("#", justify="right", style="dim")
-        table.add_column("ID", style="bold cyan")
+        table.add_column("Alias", style="bold yellow")
+        table.add_column("ID", style="cyan")
         table.add_column("Name")
         table.add_column("Tactic", style="magenta")
         table.add_column("Targets", style="green")
         self._listing = []
         for module_id in sorted(registry):
             spec = ModuleSpec.from_module(registry[module_id])
-            hay = f"{spec.id} {spec.name} {spec.tactic}".lower()
+            hay = f"{spec.id} {spec.alias} {spec.name} {spec.tactic}".lower()
             if needle and needle not in hay:
                 continue
             table.add_row(
-                str(len(self._listing)), spec.id, spec.name, spec.tactic, ", ".join(spec.targets)
+                str(len(self._listing)),
+                spec.alias or "-",
+                spec.id,
+                spec.name,
+                spec.tactic,
+                ", ".join(spec.targets),
             )
             self._listing.append(spec.id)
         self.console.print(table)
-        self.console.print("[dim]select with 'use <#>', 'use <id>', or 'use <name>'.[/dim]")
+        self.console.print("[dim]select with 'use <#|alias|id|name>'.[/dim]")
 
     def do_search(self, arg: str) -> None:
         """search <term> — filter modules by substring (then 'use <#>')."""
@@ -146,17 +153,21 @@ class CutoutConsole(cmd.Cmd):
                 return self._listing[idx]
             self._err(f"no #{idx} in the last list (run 'list' or 'search' first)")
             return None
-        # 2) exact ID (case-insensitive).
+        # 2) exact ID or alias (case-insensitive).
         by_id = {mid.lower(): mid for mid in registry}
         if query.lower() in by_id:
             return by_id[query.lower()]
-        # 3) unique substring match on id / name / tactic.
+        by_alias = {registry[mid].alias.lower(): mid for mid in registry if registry[mid].alias}
+        if query.lower() in by_alias:
+            return by_alias[query.lower()]
+        # 3) unique substring match on id / alias / name / tactic.
         q = query.lower()
-        matches = [
-            mid
-            for mid in sorted(registry)
-            if q in f"{mid} {registry[mid].name} {registry[mid].tactic}".lower()
-        ]
+
+        def hay(mid: str) -> str:
+            m = registry[mid]
+            return f"{mid} {m.alias} {m.name} {m.tactic}".lower()
+
+        matches = [mid for mid in sorted(registry) if q in hay(mid)]
         if len(matches) == 1:
             return matches[0]
         if not matches:
@@ -179,15 +190,19 @@ class CutoutConsole(cmd.Cmd):
         self.current = module_id
         self.opts = {}
         self._set_prompt()
-        name = ModuleSpec.from_module(get_module(module_id)).name
-        self.console.print(f"[dim]using[/dim] [bold cyan]{module_id}[/bold cyan] — {name}")
+        spec = ModuleSpec.from_module(get_module(module_id))
+        tag = f"[bold yellow]{spec.alias}[/bold yellow] ({module_id})" if spec.alias else module_id
+        self.console.print(f"[dim]using[/dim] {tag} — {spec.name}")
 
     def complete_use(self, text: str, line: str, begidx: int, endidx: int) -> list[str]:
         low = text.lower()
+        registry = get_registry()
         out: list[str] = []
-        for mid in sorted(get_registry()):
-            name = get_registry()[mid].name
-            if mid.lower().startswith(low) or low in name.lower():
+        for mid in sorted(registry):
+            mod = registry[mid]
+            if mod.alias.lower().startswith(low):
+                out.append(mod.alias)
+            elif mid.lower().startswith(low) or low in mod.name.lower():
                 out.append(mid)
         return out
 

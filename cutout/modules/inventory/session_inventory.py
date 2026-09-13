@@ -18,6 +18,7 @@ from cutout.engine.session import CheckResult, RunResult, Session
 @register
 class SessionInventory(BaseModule):
     id = "CUT-INV-001"
+    alias = "rollcall"
     name = "Session Inventory"
     tactic = "inventory"
     targets = ["orchestrator"]

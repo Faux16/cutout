@@ -31,6 +31,7 @@ def _harvest_secrets(tool_calls: list[dict[str, Any]]) -> dict[str, str]:
 @register
 class CoercedToolCall(BaseModule):
     id = "CUT-EXEC-001"
+    alias = "puppet"
     name = "Coerced Tool Invocation"
     tactic = "EXEC"
     targets = ["tool", "mcp"]

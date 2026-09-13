@@ -20,6 +20,7 @@ from cutout.engine.session import CheckResult, RunResult, Session
 @register
 class A2APropagation(BaseModule):
     id = "CUT-LAT-001"
+    alias = "courier"
     name = "Agent-to-Agent Propagation"
     tactic = "LAT"
     targets = ["a2a"]

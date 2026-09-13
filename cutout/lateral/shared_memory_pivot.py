@@ -20,6 +20,7 @@ from cutout.engine.session import CheckResult, RunResult, Session
 @register
 class SharedMemoryPivot(BaseModule):
     id = "CUT-LAT-002"
+    alias = "brushpass"
     name = "Shared-Memory Pivot"
     tactic = "LAT"
     targets = ["memory", "rag"]
