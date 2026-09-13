@@ -1,0 +1,30 @@
+# Secrets — never commit (contains a real PAT / credentials)
+.env
+.env.*
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtualenvs
+.venv/
+venv/
+
+# Tooling caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Run transcripts
+runs/
+
+# Range state (disk-backed poisonable corpus)
+.cutout-range/
+
+# uv
+uv.lock

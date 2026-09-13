@@ -1,0 +1,478 @@
+# Cutout Technique Matrix — v0.1
+# ATT&CK-for-agents. Every technique maps to a runnable module.
+# ID scheme: CUT-<TACTIC>-<NNN>
+# targets: which agentic surface the technique acts on
+#   mcp | a2a | rag | memory | tool | instr | human | orchestrator
+# status: planned | implemented
+# layer: which framework module namespace implements it
+
+meta:
+  name: "CTX — Cutout Technique Taxonomy"
+  version: "0.1"
+  id_scheme: "CUT-<TACTIC>-<NNN>"
+  tactics_order:
+    - RECON   # Reconnaissance
+    - INJ     # Initial Injection (initial access)
+    - EXEC    # Execution
+    - PERS    # Persistence
+    - PRIV    # Privilege Escalation (delegation abuse)
+    - EVAS    # Defense Evasion
+    - CRED    # Credential Access
+    - DISC    # Discovery
+    - LAT     # Lateral Movement
+    - COLL    # Collection
+    - EXFIL   # Exfiltration
+    - IMP     # Impact
+
+techniques:
+
+  # ---- RECON ----
+  - id: CUT-RECON-001
+    name: Tool & Schema Enumeration
+    tactic: RECON
+    layer: recon
+    targets: [mcp, tool]
+    desc: Enumerate exposed MCP tools, their JSON schemas, and argument types.
+    status: implemented
+  - id: CUT-RECON-002
+    name: Agent Topology Mapping
+    tactic: RECON
+    layer: recon
+    targets: [a2a, orchestrator]
+    desc: Discover downstream/sub-agents and A2A peers; build the relay graph.
+    status: planned
+  - id: CUT-RECON-003
+    name: System-Prompt / Instruction Extraction
+    tactic: RECON
+    layer: recon
+    targets: [instr, orchestrator]
+    desc: Elicit the system prompt, tool guidance, and embedded policy.
+    status: planned
+  - id: CUT-RECON-004
+    name: Model & Guardrail Fingerprinting
+    tactic: RECON
+    layer: recon
+    targets: [orchestrator]
+    desc: Identify model family, context window, and guardrail behavior.
+    status: planned
+  - id: CUT-RECON-005
+    name: Credential-Scope Discovery
+    tactic: RECON
+    layer: recon
+    targets: [tool, mcp]
+    desc: Infer which tokens/scopes the agent holds from tool availability.
+    status: planned
+  - id: CUT-RECON-006
+    name: Memory / Vector-Store Discovery
+    tactic: RECON
+    layer: recon
+    targets: [rag, memory]
+    desc: Identify RAG/vector/memory backends and their write paths.
+    status: planned
+
+  # ---- INJ (Initial Injection) ----
+  - id: CUT-INJ-001
+    name: Direct Prompt Injection
+    tactic: INJ
+    layer: delivery
+    targets: [orchestrator]
+    desc: Untrusted instruction delivered on the user channel.
+    status: planned
+  - id: CUT-INJ-002
+    name: Indirect Injection via RAG/Document
+    tactic: INJ
+    layer: delivery
+    targets: [rag]
+    desc: Payload planted in a retrievable document/corpus entry.
+    status: implemented
+  - id: CUT-INJ-003
+    name: Indirect Injection via Tool Output
+    tactic: INJ
+    layer: delivery
+    targets: [tool]
+    desc: Poisoned API response / webpage the agent reads as tool output.
+    status: planned
+  - id: CUT-INJ-004
+    name: Inter-Agent Message Injection
+    tactic: INJ
+    layer: delivery
+    targets: [a2a]
+    desc: Payload delivered inside an A2A message from a peer agent.
+    status: planned
+  - id: CUT-INJ-005
+    name: Task-Queue / Ticket / Email Injection
+    tactic: INJ
+    layer: delivery
+    targets: [orchestrator, tool]
+    desc: Payload in a ticket, email, or work item the agent processes.
+    status: planned
+  - id: CUT-INJ-006
+    name: Tool-Description Injection
+    tactic: INJ
+    layer: delivery
+    targets: [mcp]
+    desc: Malicious instructions embedded in an MCP tool's description/metadata.
+    status: planned
+  - id: CUT-INJ-007
+    name: Multimodal Injection
+    tactic: INJ
+    layer: delivery
+    targets: [orchestrator]
+    desc: Payload embedded in an image/PDF the agent ingests.
+    status: planned
+
+  # ---- EXEC ----
+  - id: CUT-EXEC-001
+    name: Coerced Tool Invocation
+    tactic: EXEC
+    layer: payloads
+    targets: [tool, mcp]
+    desc: Drive the agent to call a tool it would not otherwise call.
+    status: implemented
+  - id: CUT-EXEC-002
+    name: Tool-Argument Injection
+    tactic: EXEC
+    layer: payloads
+    targets: [tool]
+    desc: Control the arguments passed to a legitimately-invoked tool.
+    status: planned
+  - id: CUT-EXEC-003
+    name: Multi-Step Tool Chaining
+    tactic: EXEC
+    layer: payloads
+    targets: [tool, orchestrator]
+    desc: Sequence several tool calls to reach an objective.
+    status: planned
+  - id: CUT-EXEC-004
+    name: Code Execution via Interpreter Tool
+    tactic: EXEC
+    layer: payloads
+    targets: [tool]
+    desc: Reach code execution through a code-interpreter/exec tool.
+    status: planned
+  - id: CUT-EXEC-005
+    name: Confused-Deputy Invocation
+    tactic: EXEC
+    layer: payloads
+    targets: [mcp, tool]
+    desc: Make a privileged component act on the attacker's behalf.
+    status: planned
+
+  # ---- PERS (differentiator) ----
+  - id: CUT-PERS-001
+    name: RAG / Vector-Store Implant
+    tactic: PERS
+    layer: persistence
+    targets: [rag]
+    desc: Plant a durable payload document that re-triggers on future retrieval.
+    status: implemented
+  - id: CUT-PERS-002
+    name: Conversation-Memory Implant
+    tactic: PERS
+    layer: persistence
+    targets: [memory]
+    desc: Write a persistent instruction into the agent's long-term memory.
+    status: planned
+  - id: CUT-PERS-003
+    name: Poisoned Instruction File
+    tactic: PERS
+    layer: persistence
+    targets: [instr]
+    desc: Modify CLAUDE.md / skills / system-prompt files read at every start.
+    status: planned
+  - id: CUT-PERS-004
+    name: Persistent Tool-Description Poison
+    tactic: PERS
+    layer: persistence
+    targets: [mcp]
+    desc: Durable malicious MCP tool metadata surviving reconnection.
+    status: planned
+  - id: CUT-PERS-005
+    name: Scheduled-Task Implant
+    tactic: PERS
+    layer: persistence
+    targets: [orchestrator, tool]
+    desc: Register a recurring task/cron the agent will execute later.
+    status: planned
+  - id: CUT-PERS-006
+    name: Rug-Pull Tool
+    tactic: PERS
+    layer: persistence
+    targets: [mcp]
+    desc: Server behaves benignly at approval, mutates behavior post-trust.
+    status: planned
+
+  # ---- PRIV (delegation abuse) ----
+  - id: CUT-PRIV-001
+    name: Delegated-Token Abuse
+    tactic: PRIV
+    layer: lateral
+    targets: [tool, mcp]
+    desc: Use the agent's delegated credentials beyond the operator's intent.
+    status: planned
+  - id: CUT-PRIV-002
+    name: Scope Escalation via Chaining
+    tactic: PRIV
+    layer: lateral
+    targets: [tool]
+    desc: Combine low-scope tools to achieve a higher-scope effect.
+    status: planned
+  - id: CUT-PRIV-003
+    name: Approval Farming (HITL)
+    tactic: PRIV
+    layer: lateral
+    targets: [human]
+    desc: Manipulate the human-in-the-loop into approving a malicious action.
+    status: planned
+  - id: CUT-PRIV-004
+    name: Cross-Agent Trust Exploitation
+    tactic: PRIV
+    layer: lateral
+    targets: [a2a]
+    desc: Leverage a more-privileged downstream agent's trust in the caller.
+    status: planned
+  - id: CUT-PRIV-005
+    name: Privileged Sub-Agent Spawning
+    tactic: PRIV
+    layer: lateral
+    targets: [orchestrator]
+    desc: Spawn a sub-agent inheriting broader privileges than intended.
+    status: planned
+
+  # ---- EVAS ----
+  - id: CUT-EVAS-001
+    name: Guardrail Bypass / Jailbreak Encoding
+    tactic: EVAS
+    layer: payloads
+    targets: [orchestrator]
+    desc: Encode the payload to bypass input/output guardrails.
+    status: planned
+  - id: CUT-EVAS-002
+    name: Instruction-in-Data Obfuscation
+    tactic: EVAS
+    layer: payloads
+    targets: [rag, tool]
+    desc: Hide instructions with unicode/encoding/whitespace steganography.
+    status: planned
+  - id: CUT-EVAS-003
+    name: Trace / Log Tampering
+    tactic: EVAS
+    layer: evidence
+    targets: [orchestrator]
+    desc: Suppress, forge, or corrupt the run transcript/audit trail.
+    status: planned
+  - id: CUT-EVAS-004
+    name: Semantic Splitting
+    tactic: EVAS
+    layer: payloads
+    targets: [rag, orchestrator]
+    desc: Distribute a payload across turns/documents to evade detection.
+    status: planned
+  - id: CUT-EVAS-005
+    name: Guardrail-Model Confusion
+    tactic: EVAS
+    layer: payloads
+    targets: [orchestrator]
+    desc: Exploit divergence between guardrail model and primary model.
+    status: planned
+
+  # ---- CRED ----
+  - id: CUT-CRED-001
+    name: Context Credential Harvest
+    tactic: CRED
+    layer: payloads
+    targets: [orchestrator]
+    desc: Extract secrets/keys present in the context window.
+    status: planned
+  - id: CUT-CRED-002
+    name: Tool-Token Extraction
+    tactic: CRED
+    layer: payloads
+    targets: [tool, mcp]
+    desc: Recover tokens a tool holds or passes.
+    status: planned
+  - id: CUT-CRED-003
+    name: Environment / Config Exfil
+    tactic: CRED
+    layer: payloads
+    targets: [tool]
+    desc: Read env vars / config via a filesystem or exec tool.
+    status: planned
+  - id: CUT-CRED-004
+    name: MCP Server Credential Theft
+    tactic: CRED
+    layer: payloads
+    targets: [mcp]
+    desc: Steal credentials an MCP server stores or brokers.
+    status: planned
+
+  # ---- DISC ----
+  - id: CUT-DISC-001
+    name: Post-Access Tool Discovery
+    tactic: DISC
+    layer: recon
+    targets: [tool, mcp]
+    desc: Enumerate reachable tools once a foothold exists.
+    status: planned
+  - id: CUT-DISC-002
+    name: Data-Source Enumeration
+    tactic: DISC
+    layer: recon
+    targets: [rag, tool]
+    desc: Map what data sources the agent can read/write.
+    status: planned
+  - id: CUT-DISC-003
+    name: Connected-Agent Discovery
+    tactic: DISC
+    layer: recon
+    targets: [a2a]
+    desc: Find other agents reachable from the compromised one.
+    status: planned
+  - id: CUT-DISC-004
+    name: Resource / Filesystem Discovery
+    tactic: DISC
+    layer: recon
+    targets: [tool]
+    desc: Enumerate files/resources reachable via tools.
+    status: planned
+
+  # ---- LAT ----
+  - id: CUT-LAT-001
+    name: Agent-to-Agent Propagation
+    tactic: LAT
+    layer: lateral
+    targets: [a2a]
+    desc: Move from one agent to a peer via A2A messaging.
+    status: planned
+  - id: CUT-LAT-002
+    name: Shared-Memory Pivot
+    tactic: LAT
+    layer: lateral
+    targets: [memory, rag]
+    desc: Reach another agent by writing to shared memory it reads.
+    status: planned
+  - id: CUT-LAT-003
+    name: Shared-Queue / Message-Bus Pivot
+    tactic: LAT
+    layer: lateral
+    targets: [orchestrator]
+    desc: Pivot through a shared task queue or message bus.
+    status: planned
+  - id: CUT-LAT-004
+    name: Human-Relay Pivot
+    tactic: LAT
+    layer: lateral
+    targets: [human]
+    desc: Use a human to carry the payload to an otherwise-isolated agent.
+    status: planned
+  - id: CUT-LAT-005
+    name: Tool-Mediated Pivot
+    tactic: LAT
+    layer: lateral
+    targets: [tool]
+    desc: Pivot via a shared datastore/tool both agents write and read.
+    status: planned
+  - id: CUT-LAT-006
+    name: Self-Propagating Agent Worm
+    tactic: LAT
+    layer: lateral
+    targets: [a2a, rag]
+    desc: Payload that autonomously replicates to each agent it reaches.
+    status: planned
+
+  # ---- COLL ----
+  - id: CUT-COLL-001
+    name: Conversation-History Harvest
+    tactic: COLL
+    layer: payloads
+    targets: [memory, orchestrator]
+    desc: Collect prior conversation/history content.
+    status: planned
+  - id: CUT-COLL-002
+    name: RAG-Corpus Staging
+    tactic: COLL
+    layer: payloads
+    targets: [rag]
+    desc: Stage sensitive corpus documents for exfil.
+    status: planned
+  - id: CUT-COLL-003
+    name: Tool-Output Aggregation
+    tactic: COLL
+    layer: payloads
+    targets: [tool]
+    desc: Aggregate sensitive data returned across tool calls.
+    status: planned
+
+  # ---- EXFIL ----
+  - id: CUT-EXFIL-001
+    name: Outbound Tool-Call Exfil
+    tactic: EXFIL
+    layer: payloads
+    targets: [tool]
+    desc: Exfil via an outbound HTTP/webhook/email tool.
+    status: planned
+  - id: CUT-EXFIL-002
+    name: Rendered-Markdown / Image Exfil
+    tactic: EXFIL
+    layer: payloads
+    targets: [orchestrator]
+    desc: Encode data in a URL inside rendered markdown/image the client fetches.
+    status: planned
+  - id: CUT-EXFIL-003
+    name: Inter-Agent Exfil
+    tactic: EXFIL
+    layer: payloads
+    targets: [a2a]
+    desc: Route stolen data out through an A2A message path.
+    status: planned
+  - id: CUT-EXFIL-004
+    name: Tool-Argument Encoding Exfil
+    tactic: EXFIL
+    layer: payloads
+    targets: [tool]
+    desc: Smuggle data inside otherwise-legitimate tool arguments.
+    status: planned
+  - id: CUT-EXFIL-005
+    name: Covert-Channel Exfil
+    tactic: EXFIL
+    layer: payloads
+    targets: [orchestrator]
+    desc: Timing/ordering side channels to leak data.
+    status: planned
+
+  # ---- IMP ----
+  - id: CUT-IMP-001
+    name: Unauthorized Action / Transaction
+    tactic: IMP
+    layer: payloads
+    targets: [tool]
+    desc: Cause a real unauthorized action (payment, deletion, send).
+    status: planned
+  - id: CUT-IMP-002
+    name: Data Destruction / Corruption
+    tactic: IMP
+    layer: payloads
+    targets: [tool, rag]
+    desc: Destroy or corrupt data via the agent's tools.
+    status: planned
+  - id: CUT-IMP-003
+    name: Denial of Wallet
+    tactic: IMP
+    layer: payloads
+    targets: [orchestrator]
+    desc: Exhaust tokens/compute/cost to cause economic denial.
+    status: planned
+  - id: CUT-IMP-004
+    name: Output Corruption / Misinformation
+    tactic: IMP
+    layer: payloads
+    targets: [orchestrator]
+    desc: Corrupt the agent's outputs to mislead downstream consumers.
+    status: planned
+  - id: CUT-IMP-005
+    name: Full Agent Hijack
+    tactic: IMP
+    layer: payloads
+    targets: [orchestrator]
+    desc: Achieve durable control of the agent's behavior.
+    status: planned

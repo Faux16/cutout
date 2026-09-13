@@ -1,0 +1,39 @@
+# Cutout technique catalog — engine-facing coverage index.
+#
+# This is the lightweight index the `cutout catalog` command reads to show which
+# techniques have a registered module. The canonical, fully-specified taxonomy lives
+# in taxonomy/matrix.yaml; entries here reference those IDs (plus the reference stub).
+#
+# Adding a technique here without a module shows it as "planned"; registering a module
+# whose id matches an entry flips it to "implemented".
+
+techniques:
+  - id: CUT-INV-001
+    name: Session Inventory
+    tactic: inventory
+    targets: [orchestrator]
+  - id: CUT-RECON-001
+    name: Tool & Schema Enumeration
+    tactic: RECON
+    targets: [mcp, tool]
+  - id: CUT-INJ-002
+    name: Indirect Injection via RAG/Document
+    tactic: INJ
+    targets: [rag]
+  - id: CUT-EXEC-001
+    name: Coerced Tool Invocation
+    tactic: EXEC
+    targets: [tool, mcp]
+  - id: CUT-PERS-001
+    name: RAG / Vector-Store Implant
+    tactic: PERS
+    targets: [rag]
+  # Next up (planned — no module yet):
+  - id: CUT-LAT-001
+    name: Agent-to-Agent Propagation
+    tactic: LAT
+    targets: [a2a]
+  - id: CUT-EXFIL-001
+    name: Outbound Tool-Call Exfil
+    tactic: EXFIL
+    targets: [tool]

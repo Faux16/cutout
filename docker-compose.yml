@@ -1,0 +1,57 @@
+# The cutout-range: a deliberately-vulnerable multi-agent stack.
+#
+#   docker compose up --build
+#   cutout run --target http://127.0.0.1:8600 CUT-RECON-001
+#   cutout run --target http://127.0.0.1:8600 CUT-INJ-002
+#   cutout run --target http://127.0.0.1:8600 CUT-EXEC-001    # exfils a live secret
+#   cutout run --target http://127.0.0.1:8600 CUT-PERS-001
+#
+# All five services share one network. Ports are published to the host so the attack
+# modules (running on the host) can reach both the orchestrator and — via /topology
+# discovery — the downstream tool servers and RAG corpus directly.
+#
+# THIS STACK IS INTENTIONALLY INSECURE. Do not deploy it. See ETHICS.md.
+
+x-image: &image
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: cutout-range:latest
+
+services:
+  customer-data:
+    <<: *image
+    command: uvicorn cutout_range.service.servers.customer_data:app --host 0.0.0.0 --port 8611
+    ports: ["8611:8611"]
+
+  fs-tools:
+    <<: *image
+    command: uvicorn cutout_range.service.servers.fs_tools:app --host 0.0.0.0 --port 8612
+    ports: ["8612:8612"]
+
+  external-fetch:
+    <<: *image
+    command: uvicorn cutout_range.service.servers.external_fetch:app --host 0.0.0.0 --port 8613
+    ports: ["8613:8613"]
+
+  rag-corpus:
+    <<: *image
+    command: uvicorn cutout_range.service.servers.rag:app --host 0.0.0.0 --port 8614
+    ports: ["8614:8614"]
+
+  orchestrator:
+    <<: *image
+    command: uvicorn cutout_range.service.servers.orchestrator:app --host 0.0.0.0 --port 8600
+    ports: ["8600:8600"]
+    depends_on: [customer-data, fs-tools, external-fetch, rag-corpus]
+    environment:
+      # Internal service-DNS URLs the orchestrator uses to reach peers.
+      CUTOUT_RANGE_CUSTOMER_DATA_URL: http://customer-data:8611
+      CUTOUT_RANGE_FS_TOOLS_URL: http://fs-tools:8612
+      CUTOUT_RANGE_EXTERNAL_FETCH_URL: http://external-fetch:8613
+      CUTOUT_RANGE_RAG_CORPUS_URL: http://rag-corpus:8614
+      # Host-reachable URLs advertised to the attacker via /topology.
+      CUTOUT_RANGE_ADVERTISE_CUSTOMER_DATA_URL: http://127.0.0.1:8611
+      CUTOUT_RANGE_ADVERTISE_FS_TOOLS_URL: http://127.0.0.1:8612
+      CUTOUT_RANGE_ADVERTISE_EXTERNAL_FETCH_URL: http://127.0.0.1:8613
+      CUTOUT_RANGE_ADVERTISE_RAG_CORPUS_URL: http://127.0.0.1:8614
