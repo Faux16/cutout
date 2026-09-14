@@ -11,6 +11,8 @@ Commands:
 from __future__ import annotations
 
 import asyncio
+import json
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -253,6 +255,71 @@ def catalog(
         table.add_row(entry.id, entry.name, entry.tactic, status)
     console.print(table)
     console.print(f"[dim]{implemented}/{len(entries)} implemented.[/dim]")
+
+
+@app.command("canary")
+def canary_cmd(
+    port: int = typer.Option(8700, "--port", help="Port to serve on."),
+    host: str = typer.Option("0.0.0.0", "--host", help="Bind address."),
+    content: str | None = typer.Option(
+        None, "--content", help="Content the lookup/fetch tools return (plant test content)."
+    ),
+    log: Path = typer.Option(Path("runs/canary.jsonl"), "--log", help="JSONL log path."),
+) -> None:
+    """Run the canary connector — a logging MCP endpoint for authorized agent observation."""
+    try:
+        import uvicorn
+        from cutout_range.service.canary import canary_server, http_app
+    except ImportError as exc:
+        err_console.print("[red]error:[/red] needs the range extra: pip install 'cutout[range]'")
+        raise typer.Exit(code=1) from exc
+
+    if content is not None:
+        os.environ["CUTOUT_CANARY_CONTENT"] = content
+    os.environ["CUTOUT_CANARY_LOG"] = str(log)
+    console.print(
+        f"[bold]canary connector[/bold] on http://{host}:{port}/mcp  (log: {log})\n"
+        "[dim]wire this into an agent you are authorized to test; Ctrl-C to stop.[/dim]"
+    )
+    uvicorn.run(http_app(canary_server()), host=host, port=port, log_level="warning")
+
+
+@app.command("canary-report")
+def canary_report(
+    log: Path = typer.Argument(..., help="Canary JSONL log to summarize."),
+) -> None:
+    """Summarize a canary log and draft a finding skeleton (exfil candidates highlighted)."""
+    if not log.exists():
+        err_console.print(f"[red]error:[/red] no such log: {log}")
+        raise typer.Exit(code=1)
+    events = [json.loads(line) for line in log.read_text().splitlines() if line.strip()]
+    exfil = [e for e in events if e.get("exfil_candidate")]
+
+    table = Table(title=f"Canary log — {log}")
+    table.add_column("#", justify="right", style="dim")
+    table.add_column("Timestamp", style="dim")
+    table.add_column("Tool", style="bold cyan")
+    table.add_column("Arguments", style="green")
+    table.add_column("Flag")
+    for i, e in enumerate(events, start=1):
+        flag = "[red]EXFIL?[/red]" if e.get("exfil_candidate") else ""
+        table.add_row(str(i), e.get("ts", ""), e.get("tool", ""), str(e.get("arguments", {})), flag)
+    console.print(table)
+    console.print(f"[dim]{len(events)} call(s), {len(exfil)} exfil candidate(s).[/dim]")
+
+    if exfil:
+        console.print(
+            Panel(
+                "[bold]Finding draft[/bold] (reconcile with the program brief):\n"
+                "• Summary: agent was steered to send data to an attacker-controlled tool.\n"
+                f"• Evidence: {len(exfil)} call(s) to a sink/URL carrying data (see EXFIL? rows).\n"
+                "• Material harm: <what an attacker gains — leaked data / unauthorized action>.\n"
+                "• Repro: <the benign task + planted content that caused it>.\n"
+                "• Mitigation: enforce a data/instruction trust boundary; gate tools on intent.",
+                title="report skeleton",
+                expand=False,
+            )
+        )
 
 
 @app.command("console")
