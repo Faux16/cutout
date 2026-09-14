@@ -90,6 +90,17 @@ def test_scan_populates_hosts_and_services(tmp_path: Path) -> None:
     con.onecmd("services")
 
 
+def test_unreachable_target_does_not_crash(tmp_path: Path) -> None:
+    con = _console(tmp_path)
+    con.onecmd("set TARGET http://127.0.0.1:1")  # nothing listening -> connection refused
+    # A connection error must be caught, not propagate out of the REPL.
+    con.onecmd("scan")
+    # Console is still alive and usable afterward.
+    con.onecmd("unset TARGET")
+    con.onecmd("use puppet")
+    assert con.current == "CUT-EXEC-001"
+
+
 def test_set_option_and_target(tmp_path: Path) -> None:
     con = _console(tmp_path)
     con.onecmd("use CUT-INJ-002")

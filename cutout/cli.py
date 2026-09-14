@@ -164,6 +164,11 @@ def run(
     except (CutoutError, OptionError) as exc:
         err_console.print(f"[red]error:[/red] {exc}")
         raise typer.Exit(code=1) from exc
+    except Exception as exc:
+        err_console.print(f"[red]error:[/red] {type(exc).__name__}: {exc}")
+        if target:
+            err_console.print(f"[dim]could not reach target {target}; is it up?[/dim]")
+        raise typer.Exit(code=1) from exc
 
     color = {"success": "green", "failed": "red", "skipped": "yellow"}.get(result.status, "white")
     console.print(

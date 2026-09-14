@@ -106,6 +106,24 @@ class CutoutConsole(cmd.Cmd):
     def default(self, line: str) -> None:
         self.console.print(f"[red]unknown command:[/red] {line.split()[0]} (try 'help')")
 
+    def onecmd(self, line: str) -> bool:
+        """Run a command, but never let an error kill the REPL (msfconsole-style)."""
+        try:
+            return bool(super().onecmd(line))
+        except (KeyboardInterrupt, EOFError):
+            raise
+        except Exception as exc:
+            msg = f"{type(exc).__name__}: {exc}"
+            self._err(msg)
+            if any(k in msg.lower() for k in ("refus", "connect", "timed out", "errno", "resolve")):
+                self.console.print(
+                    "[dim]  couldn't reach the target — is the stack up "
+                    "('docker compose up -d') and did you include the port "
+                    "(set TARGET http://127.0.0.1:8600)?[/dim]"
+                )
+                self.console.print("[dim]  'unset TARGET' returns to the offline range.[/dim]")
+            return False
+
     def _err(self, msg: str) -> None:
         self.console.print(f"[red]error:[/red] {msg}")
 
