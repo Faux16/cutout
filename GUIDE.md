@@ -176,6 +176,24 @@ build a chain interactively, use the console.
 
 ---
 
+## 5b. Canary connector — observe an agent's tool use (authorized testing)
+
+A logging MCP endpoint you wire into your *own* agent (e.g. a connector in ChatGPT/Operator)
+to see exactly what it does with tool output — and to catch exfil. It only observes; it
+attacks nothing.
+
+```bash
+CUTOUT_CANARY_CONTENT="...content the agent will read..." \
+CUTOUT_CANARY_LOG=runs/canary.jsonl \
+uvicorn cutout_range.service.servers.canary:app --host 0.0.0.0 --port 8700
+```
+
+It exposes `notes_lookup`/`fetch` (return your `CUTOUT_CANARY_CONTENT`, to test whether
+instructions embedded in tool output steer the agent) and `submit_report` (a sink that logs
+whatever the agent sends — if injected content makes the agent ship data here, it's flagged
+`exfil_candidate` in the log). Every call is recorded to the JSONL log and printed live.
+**Only connect it to accounts/agents you are authorized to test.**
+
 ## 6. The modules
 
 | Alias | ID | Does |
