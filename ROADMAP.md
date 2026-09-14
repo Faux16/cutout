@@ -12,9 +12,11 @@ Phase 0 is complete and Phase 1 is well underway:
 - **Engine & CLI** — session, evidence/JSONL, module registry/loader, option validation,
   deterministic offline provider; Typer + Rich CLI and an msfconsole-style console.
 - **Taxonomy (CTX)** — `taxonomy/matrix.yaml` with a stable ID scheme and per-technique aliases.
-- **Seven techniques**, a full attack chain end to end against the range:
-  `casing` (recon) → `deaddrop` (RAG injection) → `puppet` (coerced tool call / harvest) →
-  `sleeper` (durable implant) → `courier` / `brushpass` (lateral movement) → `siphon` (exfil).
+- **Eight techniques**, a full attack chain end to end against the range:
+  `casing` (recon) → `frisk` (filesystem-reach discovery) → `deaddrop` (RAG injection) →
+  `puppet` (coerced tool call / harvest) → `sleeper` (durable implant) →
+  `courier` / `brushpass` (lateral movement) → `siphon` (exfil). `frisk` also runs against
+  real MCP servers — it is the reusable form of the first real-world finding.
 - **The range, two ways** — an offline in-process stack (zero setup, also the test fixture)
   and a networked Docker stack whose tool servers are real MCP servers with transport auth.
 - **Quality** — types throughout, `ruff` + `mypy` + `pytest` green in CI.

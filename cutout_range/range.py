@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .agent import A2AResult, Orchestrator, PeerAgent
 from .corpus import Document, RagCorpus
@@ -92,6 +92,24 @@ class Range:
         for server in self.servers.values():
             specs.extend(server.list_tools())
         return specs
+
+    async def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Invoke a tool by name with attacker-controlled args, unauthenticated.
+
+        Mirrors :meth:`McpTarget.call_tool` so probe modules can drive the in-process
+        range and a real MCP server through one interface. No credential is presented —
+        this models an external caller poking the tool directly, not the delegated agent.
+        """
+        server_id = self.tool_index.get(name)
+        if server_id is None:
+            return {"ok": False, "tool": name, "error": "no such tool"}
+        result = await self.servers[server_id].call(name, arguments or {}, credential=None)
+        out: dict[str, Any] = {"ok": result.ok, "tool": name}
+        if result.data is not None:
+            out["data"] = result.data
+        if result.error:
+            out["error"] = result.error
+        return out
 
     async def send_a2a(
         self, to_agent: str, message: str, message_from: str = "orchestrator"
