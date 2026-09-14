@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shlex
 import socket
 import threading
 import time
@@ -64,6 +65,23 @@ def test_mcp_target_call_tool(live_mcp_url: str) -> None:
     # A sensitive call with no bearer token is refused by the server.
     denied = target.call_tool("get_customer_secret", {"id": "VIP-001"})
     assert denied["data"]["ok"] is False
+
+
+def test_mcp_target_stdio_transport() -> None:
+    # Spawn our own MCP server as a stdio subprocess and recon it over stdio.
+    import sys
+
+    code = (
+        "from cutout_range.service.mcp_servers import customer_data_server;"
+        "from cutout_range.range import DELEGATED_TOKEN;"
+        "customer_data_server(DELEGATED_TOKEN).run(transport='stdio')"
+    )
+    target = McpTarget(command=f"{sys.executable} -c {shlex.quote(code)}")
+    names = {t.name for t in target.list_tools()}
+    assert "get_customer_secret" in names
+    host = target.probe()[0]
+    assert host.transport == "stdio"
+    assert host.reachable is True
 
 
 def test_connect_range_dispatches_mcp_scheme(live_mcp_url: str) -> None:

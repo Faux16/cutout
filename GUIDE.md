@@ -140,10 +140,14 @@ server with an `mcp://` (or `mcp+http(s)://`) target — it connects with the of
 client and enumerates the server's tools, schemas, and write/destructive hints:
 
 ```bash
-cutout run casing --target mcp://host:port/mcp        # e.g. mcp://127.0.0.1:8790/mcp
+cutout run casing --target mcp://host:port/mcp                 # HTTP (streamable) MCP server
+cutout run casing --target "mcp+stdio:npx -y some-mcp-server"   # stdio MCP server (subprocess)
 ```
 
-Set `CUTOUT_MCP_TOKEN` to send an `Authorization: Bearer <token>` on the connection. This is
+Most open-source MCP servers run over **stdio** — use the `mcp+stdio:<command>` form and
+Cutout spawns the server and talks to it over stdin/stdout. HTTP servers use `mcp://` (or
+`mcp+http(s)://`). Set `CUTOUT_MCP_TOKEN` to send an `Authorization: Bearer <token>` on an
+HTTP connection. This is
 recon only; the attack modules need a full range/agent target. **Only run this against MCP
 servers you own or are explicitly authorized to test.**
 

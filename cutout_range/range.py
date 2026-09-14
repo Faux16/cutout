@@ -181,6 +181,10 @@ def connect_range(target: object) -> Range | RemoteRange | McpTarget:
     uri = getattr(target, "uri", None)
     if uri:
         u = str(uri)
+        if u.startswith("mcp+stdio:"):
+            from .mcp_target import McpTarget
+
+            return McpTarget(command=u[len("mcp+stdio:") :])
         if u.startswith(("mcp://", "mcp+http://", "mcp+https://")):
             from .mcp_target import McpTarget
 

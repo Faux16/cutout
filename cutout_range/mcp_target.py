@@ -16,9 +16,11 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import shlex
 import threading
 import time
-from collections.abc import Coroutine
+from collections.abc import AsyncIterator, Coroutine
+from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any, TypeVar
 from urllib.parse import urlsplit
 
@@ -73,19 +75,25 @@ def _sensitive(tool: Any) -> bool:
 class McpTarget:
     """A single real MCP server, for reconnaissance over the official SDK."""
 
-    def __init__(self, url: str) -> None:
+    def __init__(self, url: str | None = None, *, command: str | None = None) -> None:
+        if not url and not command:
+            raise ValueError("McpTarget needs a url or a command")
         self.url = url
+        self._command = command
+        self._transport = "stdio" if command else "mcp"
+        self._endpoint = url if url else f"stdio: {command}"
         token = os.environ.get("CUTOUT_MCP_TOKEN")
         self._headers = {"Authorization": f"Bearer {token}"} if token else None
 
         info, tools, latency = _run_sync(self._discover())
         server_info = getattr(info, "serverInfo", None)
-        self.server_name = getattr(server_info, "name", "") or _host(url)
+        fallback = _host(url) if url else "stdio-server"
+        self.server_name = getattr(server_info, "name", "") or fallback
         self.server_version = getattr(server_info, "version", "") or ""
         self.protocol = getattr(info, "protocolVersion", "") or ""
         self._latency = latency
-        self._slug = self.server_name or _host(url)
-        self.servers: dict[str, str] = {self._slug: url}
+        self._slug = self.server_name or (_host(url) if url else shlex.split(command or "x")[0])
+        self.servers: dict[str, str] = {self._slug: self._endpoint}
         self.agents: dict[str, str] = {}
         self._tools = [
             ToolSpec(
@@ -98,16 +106,35 @@ class McpTarget:
             for t in tools
         ]
 
-    async def _discover(self) -> tuple[Any, list[Any], float]:
+    @asynccontextmanager
+    async def _open(self) -> AsyncIterator[Any]:
+        """Open an (un-initialized) client session over HTTP or stdio."""
         from mcp.client.session import ClientSession
-        from mcp.client.streamable_http import create_mcp_http_client, streamable_http_client
 
+        if self._command is not None:
+            from mcp.client.stdio import StdioServerParameters, stdio_client
+
+            parts = shlex.split(self._command)
+            params = StdioServerParameters(command=parts[0], args=parts[1:], env=dict(os.environ))
+            async with (
+                stdio_client(params) as (read, write),
+                ClientSession(read, write) as session,
+            ):
+                yield session
+        else:
+            from mcp.client.streamable_http import create_mcp_http_client, streamable_http_client
+
+            assert self.url is not None  # guaranteed: no command => url is set
+            http = create_mcp_http_client(headers=self._headers)
+            async with (
+                streamable_http_client(self.url, http_client=http) as (read, write),
+                ClientSession(read, write) as session,
+            ):
+                yield session
+
+    async def _discover(self) -> tuple[Any, list[Any], float]:
         start = time.perf_counter()
-        http = create_mcp_http_client(headers=self._headers)
-        async with (
-            streamable_http_client(self.url, http_client=http) as (read, write),
-            ClientSession(read, write) as session,
-        ):
+        async with self._open() as session:
             info = await session.initialize()
             latency = round((time.perf_counter() - start) * 1000, 2)
             listed = await session.list_tools()
@@ -125,14 +152,7 @@ class McpTarget:
         return _run_sync(self._call(name, arguments or {}))
 
     async def _call(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-        from mcp.client.session import ClientSession
-        from mcp.client.streamable_http import create_mcp_http_client, streamable_http_client
-
-        http = create_mcp_http_client(headers=self._headers)
-        async with (
-            streamable_http_client(self.url, http_client=http) as (read, write),
-            ClientSession(read, write) as session,
-        ):
+        async with self._open() as session:
             await session.initialize()
             result = await session.call_tool(name, arguments)
         out: dict[str, Any] = {"ok": not getattr(result, "isError", False), "tool": name}
@@ -149,8 +169,8 @@ class McpTarget:
             HostInfo(
                 id=self._slug,
                 kind="mcp",
-                endpoint=self.url,
-                transport="mcp",
+                endpoint=self._endpoint,
+                transport=self._transport,
                 reachable=True,
                 latency_ms=self._latency,
                 tools=len(self._tools),
