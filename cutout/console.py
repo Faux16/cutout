@@ -23,6 +23,7 @@ import cmd
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TextIO
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 from rich.console import Console
@@ -372,6 +373,12 @@ class CutoutConsole(cmd.Cmd):
                 metadata={"range_id": self._range_id},
             )
             self.console.print(f"[dim]TARGET =>[/dim] {value}")
+            parts_url = urlsplit(value)
+            if parts_url.scheme in {"http", "https"} and parts_url.port is None:
+                self.console.print(
+                    "[yellow]warning:[/yellow] no port in TARGET — the range orchestrator "
+                    "listens on :8600 (try 'set TARGET http://127.0.0.1:8600')."
+                )
             return
         if not self.current:
             self._err("no module selected; use <id> first")

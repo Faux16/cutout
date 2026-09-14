@@ -110,3 +110,13 @@ def test_set_option_and_target(tmp_path: Path) -> None:
     assert con.session.target.uri == "http://127.0.0.1:8600"
     con.onecmd("unset TARGET")
     assert con.session.target.uri is None
+
+
+def test_set_target_without_port_warns(tmp_path: Path) -> None:
+    con = _console(tmp_path)
+    con.console.record = True  # capture Rich output
+    con.onecmd("set TARGET http://127.0.0.1")
+    out = con.console.export_text()
+    assert "no port" in out.lower()
+    # It's still set (we warn, not block).
+    assert con.session.target.uri == "http://127.0.0.1"
