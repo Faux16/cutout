@@ -53,6 +53,19 @@ def test_mcp_target_enumerates_real_server(live_mcp_url: str) -> None:
     assert hosts[0].tools == 3
 
 
+def test_mcp_target_call_tool(live_mcp_url: str) -> None:
+    target = McpTarget(live_mcp_url)
+    # Benign call works. (The range tool returns a {ok,tool,data,error} envelope; a real
+    # server returns its payload directly — the harness returns whatever the tool returns.)
+    ok = target.call_tool("search_customers", {"query": "acme"})
+    assert ok["ok"] is True  # MCP-level success (not isError)
+    assert ok["data"]["ok"] is True
+    assert isinstance(ok["data"]["data"], list)
+    # A sensitive call with no bearer token is refused by the server.
+    denied = target.call_tool("get_customer_secret", {"id": "VIP-001"})
+    assert denied["data"]["ok"] is False
+
+
 def test_connect_range_dispatches_mcp_scheme(live_mcp_url: str) -> None:
     # mcp:// (or mcp+http://) selects the recon adapter, not the range.
     mcp_uri = "mcp://" + live_mcp_url[len("http://") :]

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import cmd
+import shlex
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TextIO
@@ -35,6 +36,7 @@ from cutout.engine import (
     EvidenceEvent,
     ModuleSpec,
     OptionError,
+    Phase,
     Session,
     TargetDescriptor,
     get_module,
@@ -282,6 +284,41 @@ class CutoutConsole(cmd.Cmd):
             status = "[green]up[/green]" if h["reachable"] else "[red]down[/red]"
             table.add_row(h["id"], h["kind"], h["endpoint"], h["transport"], lat, tools, status)
         self.console.print(table)
+
+    def do_call(self, arg: str) -> None:
+        """call <tool> [k=v ...] — invoke a tool on the current mcp:// target and record it.
+
+        The probing primitive for MCP-server testing: e.g. `call read_file path=../../etc/passwd`.
+        """
+        from cutout_range import McpTarget, connect_range
+
+        tokens = shlex.split(arg)
+        if not tokens:
+            self._err("usage: call <tool> [k=v ...]")
+            return
+        tool = tokens[0]
+        args: dict[str, str] = {}
+        for tok in tokens[1:]:
+            if "=" not in tok:
+                self._err(f"bad arg '{tok}' — expected key=value")
+                return
+            k, v = tok.split("=", 1)
+            args[k] = v
+        rng = connect_range(self.session.target)
+        if not isinstance(rng, McpTarget):
+            self._err("call works only on an mcp:// target (set TARGET mcp://host:port/mcp)")
+            return
+        result = rng.call_tool(tool, args)
+        event = EvidenceEvent(
+            module_id="operator",
+            phase=Phase.RUN,
+            action="tool.call",
+            data={"tool": tool, "args": args, "result": result},
+        )
+        asyncio.run(self.transcript.emit(event))
+        color = "green" if result.get("ok") else "red"
+        self.console.print(f"[{color}]{tool}[/{color}] {args} ->")
+        self.console.print(result.get("data", result.get("text", result)))
 
     def do_services(self, arg: str) -> None:
         """services — discovered tools across the target (nmap-services style)."""

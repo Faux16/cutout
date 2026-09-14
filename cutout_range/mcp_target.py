@@ -14,6 +14,7 @@ it is never confused with the range's own ``http(s)://`` orchestrator URL.
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import threading
 import time
@@ -114,6 +115,34 @@ class McpTarget:
 
     def list_tools(self) -> list[ToolSpec]:
         return list(self._tools)
+
+    def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Invoke a tool with attacker-controlled arguments and return the parsed result.
+
+        The probing primitive: craft args (path traversal, SSRF URLs, injection) and observe
+        what the server does. Only for servers you are authorized to test.
+        """
+        return _run_sync(self._call(name, arguments or {}))
+
+    async def _call(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        from mcp.client.session import ClientSession
+        from mcp.client.streamable_http import create_mcp_http_client, streamable_http_client
+
+        http = create_mcp_http_client(headers=self._headers)
+        async with (
+            streamable_http_client(self.url, http_client=http) as (read, write),
+            ClientSession(read, write) as session,
+        ):
+            await session.initialize()
+            result = await session.call_tool(name, arguments)
+        out: dict[str, Any] = {"ok": not getattr(result, "isError", False), "tool": name}
+        if result.content and hasattr(result.content[0], "text"):
+            text = result.content[0].text
+            try:
+                out["data"] = json.loads(text)
+            except (ValueError, TypeError):
+                out["text"] = text
+        return out
 
     def probe(self) -> list[HostInfo]:
         return [
