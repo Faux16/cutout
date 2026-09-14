@@ -36,28 +36,43 @@ class ToolEnumeration(BaseModule):
 
     async def run(self, session: Session) -> RunResult:
         rng = connect_range(session.target)
-        await self.emit(Phase.RUN, "recon.connect", {"servers": sorted(rng.servers)})
+        await self.emit(Phase.RUN, "recon.connect", {"target": session.target.uri or "in-process"})
+
+        # Probe each host on the agent network: real address + measured round-trip.
+        hosts = rng.probe()
+        for host in hosts:
+            await self.emit(
+                Phase.RUN,
+                "recon.host",
+                {
+                    "id": host.id,
+                    "kind": host.kind,
+                    "endpoint": host.endpoint,
+                    "transport": host.transport,
+                    "reachable": host.reachable,
+                    "latency_ms": host.latency_ms,
+                    "tools": host.tools,
+                    "sensitive": host.sensitive,
+                },
+            )
+            # Record each host on the topology graph with its address.
+            session.graph.add_node(
+                host.id, kind=host.kind, endpoint=host.endpoint, transport=host.transport
+            )
+            if host.kind in {"mcp", "agent", "rag"}:
+                edge = "a2a" if host.kind == "agent" else "delegates-to"
+                session.graph.add_edge("orchestrator", host.id, kind=edge)
 
         specs = rng.list_tools()
         tools = [s.model_dump() for s in specs]
         sensitive = [s.qualified() for s in specs if s.sensitive]
-
-        # Build the topology graph on the session.
-        session.graph.add_node("orchestrator", kind="orchestrator")
-        for server_id in rng.servers:
-            session.graph.add_node(server_id, kind="mcp")
-            session.graph.add_edge("orchestrator", server_id, kind="delegates-to")
         for spec in specs:
             node = spec.qualified()
             session.graph.add_node(node, kind="tool", sensitive=spec.sensitive)
             session.graph.add_edge(spec.server, node, kind="exposes")
 
-        # Discover A2A peer agents (other hosts on the agent "network").
         agents = list(getattr(rng, "agents", {}))
-        for agent_id in agents:
-            session.graph.add_node(agent_id, kind="agent")
-            session.graph.add_edge("orchestrator", agent_id, kind="a2a")
-
+        session.artifacts["hosts"] = [h.model_dump() for h in hosts]
         session.artifacts["tools"] = tools
         session.artifacts["sensitive_tools"] = sensitive
         session.artifacts["agents"] = agents

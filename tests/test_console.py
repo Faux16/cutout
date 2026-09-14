@@ -81,6 +81,10 @@ def test_scan_populates_hosts_and_services(tmp_path: Path) -> None:
     assert con.session.artifacts.get("tools")  # services discovered
     assert "billing-agent" in con.session.artifacts.get("agents", [])  # peer host found
     assert con.session.graph.has_node("customer-data")
+    # probe produced rich host records with addresses/transport
+    hosts = con.session.artifacts.get("hosts")
+    assert hosts and all("endpoint" in h and "transport" in h for h in hosts)
+    assert any(h["id"] == "customer-data" and h["transport"] == "in-process" for h in hosts)
     # hosts/services render without error
     con.onecmd("hosts")
     con.onecmd("services")

@@ -214,30 +214,54 @@ class CutoutConsole(cmd.Cmd):
 
     # ---- recon / targets (the nmap-style front half) -----------------------
     def do_scan(self, arg: str) -> None:
-        """scan — map the target: enumerate servers, tools, and peer agents (like nmap)."""
+        """scan — map the target: probe each host, enumerate tools/agents (like nmap)."""
+        target = self.session.target.uri or "in-process range"
+        self.console.print(f"[dim]scanning[/dim] [bold]{target}[/bold] ...")
+        before = len(self.transcript.events)
         try:
             result = asyncio.run(self.engine.run("CUT-RECON-001"))
         except (CutoutError, OptionError) as exc:
             self._err(str(exc))
             return
+        for event in self.transcript.events[before:]:
+            if event.action != "recon.host":
+                continue
+            d = event.data
+            status = "up" if d["reachable"] else "down"
+            color = "green" if d["reachable"] else "red"
+            lat = f"{d['latency_ms']}ms" if d.get("latency_ms") is not None else "  -"
+            if d["kind"] == "mcp":
+                detail = f"{d['tools']} tools"
+                if d["sensitive"]:
+                    detail += f", {d['sensitive']} sensitive"
+            else:
+                detail = d["kind"]
+            self.console.print(
+                f"  [{color}]{status:>4}[/{color}]  [cyan]{d['endpoint']:<32}[/cyan] "
+                f"[magenta]{d['transport']:<11}[/magenta] {lat:>9}  {detail}"
+            )
         self.console.print(f"[green]scan complete[/green] — {result.summary}")
         self.console.print("[dim]see 'hosts' and 'services'.[/dim]")
 
     def do_hosts(self, arg: str) -> None:
-        """hosts — discovered hosts on the agent network (orchestrator, MCP servers, agents)."""
-        g = self.session.graph
-        rows = [(n, d.get("kind", "?")) for n, d in g.nodes(data=True) if d.get("kind") != "tool"]
-        if not rows:
+        """hosts — discovered hosts on the agent network, with address, transport, latency."""
+        hosts = self.session.artifacts.get("hosts")
+        if not hosts:
             self.console.print("[dim]no hosts yet — run 'scan' first[/dim]")
             return
         table = Table(title="Discovered hosts")
         table.add_column("Host", style="bold cyan")
         table.add_column("Kind", style="magenta")
+        table.add_column("Address", style="green")
+        table.add_column("Transport")
+        table.add_column("Latency", justify="right")
         table.add_column("Tools", justify="right")
-        for node, kind in sorted(rows, key=lambda r: (r[1], r[0])):
-            edges = g.out_edges(node, data=True)
-            n_tools = sum(1 for _, _, e in edges if e.get("kind") == "exposes")
-            table.add_row(node, kind, str(n_tools) if kind == "mcp" else "-")
+        table.add_column("Status")
+        for h in hosts:
+            lat = f"{h['latency_ms']}ms" if h.get("latency_ms") is not None else "-"
+            tools = str(h["tools"]) if h["kind"] == "mcp" else "-"
+            status = "[green]up[/green]" if h["reachable"] else "[red]down[/red]"
+            table.add_row(h["id"], h["kind"], h["endpoint"], h["transport"], lat, tools, status)
         self.console.print(table)
 
     def do_services(self, arg: str) -> None:

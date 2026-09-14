@@ -11,16 +11,24 @@ downstream tool-server and RAG-corpus URLs (recon), which the client then attack
 
 from __future__ import annotations
 
+import time
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
 from .agent import A2AResult, OrchestratorResult
 from .corpus import Document
+from .hosts import HostInfo
 from .memory import MemoryNote
 from .tool_servers import ToolSpec
 
 _TIMEOUT = httpx.Timeout(15.0)
+
+
+def _origin(url: str) -> str:
+    parts = urlsplit(url)
+    return f"{parts.scheme}://{parts.netloc}"
 
 
 class RemoteCorpus:
@@ -80,12 +88,51 @@ class RemoteRange:
         data = topo.json()
         self.servers: dict[str, str] = dict(data["servers"])  # id -> url (discovered)
         self.agents: dict[str, str] = dict(data.get("agents", {}))  # A2A peers, id -> url
+        self.corpus_url: str = data["corpus_url"]
         self._tools = [ToolSpec.model_validate(t) for t in data["tools"]]
-        self.corpus = RemoteCorpus(data["corpus_url"])
+        self.corpus = RemoteCorpus(self.corpus_url)
         self.orchestrator = RemoteOrchestrator(self.base_url)
 
     def list_tools(self) -> list[ToolSpec]:
         return list(self._tools)
+
+    def _probe_one(
+        self, id: str, kind: str, endpoint: str, transport: str, probe_url: str | None = None
+    ) -> HostInfo:
+        # Probe the origin, not an MCP /mcp path (a GET there opens an SSE stream and hangs).
+        target = probe_url or _origin(endpoint)
+        start = time.perf_counter()
+        try:
+            httpx.get(target, timeout=httpx.Timeout(5.0))
+            reachable = True  # any HTTP response (incl. 4xx) means the host answered
+        except httpx.HTTPError:
+            reachable = False
+        return HostInfo(
+            id=id,
+            kind=kind,
+            endpoint=endpoint,
+            transport=transport,
+            reachable=reachable,
+            latency_ms=round((time.perf_counter() - start) * 1000, 2),
+        )
+
+    def probe(self) -> list[HostInfo]:
+        """Recon each discovered host over the network: real address + round-trip time."""
+        by_server: dict[str, list[ToolSpec]] = {}
+        for spec in self._tools:
+            by_server.setdefault(spec.server, []).append(spec)
+
+        hosts = [self._probe_one("orchestrator", "orchestrator", self.base_url, "http")]
+        for server_id, url in self.servers.items():
+            info = self._probe_one(server_id, "mcp", f"{url.rstrip('/')}/mcp", "mcp", probe_url=url)
+            specs = by_server.get(server_id, [])
+            info.tools = len(specs)
+            info.sensitive = sum(1 for s in specs if s.sensitive)
+            hosts.append(info)
+        hosts.append(self._probe_one("rag-corpus", "rag", self.corpus_url, "http"))
+        for agent_id, url in self.agents.items():
+            hosts.append(self._probe_one(agent_id, "agent", url, "a2a"))
+        return hosts
 
     async def send_a2a(
         self, to_agent: str, message: str, message_from: str = "orchestrator"

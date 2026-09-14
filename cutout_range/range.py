@@ -7,11 +7,13 @@ poisonable corpus across processes so a planted implant survives.
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .agent import A2AResult, Orchestrator, PeerAgent
 from .corpus import Document, RagCorpus
+from .hosts import HostInfo
 from .memory import MemoryNote
 from .tool_servers import (
     CustomerDataServer,
@@ -104,6 +106,46 @@ class Range:
     async def process_memory(self, to_agent: str) -> A2AResult:
         """Drive a peer to consume its shared memory and act on what it finds."""
         return await self.agents[to_agent].process_memory()
+
+    def probe(self) -> list[HostInfo]:
+        """Recon each host on the (in-process) agent network with a measured timing."""
+        hosts: list[HostInfo] = []
+
+        start = time.perf_counter()
+        self.list_tools()
+        hosts.append(
+            HostInfo(
+                id="orchestrator",
+                kind="orchestrator",
+                endpoint="in-process://orchestrator",
+                transport="in-process",
+                latency_ms=round((time.perf_counter() - start) * 1000, 3),
+            )
+        )
+        for server_id, server in self.servers.items():
+            start = time.perf_counter()
+            specs = server.list_tools()
+            hosts.append(
+                HostInfo(
+                    id=server_id,
+                    kind="mcp",
+                    endpoint=f"in-process://{server_id}",
+                    transport="in-process",
+                    latency_ms=round((time.perf_counter() - start) * 1000, 3),
+                    tools=len(specs),
+                    sensitive=sum(1 for s in specs if s.sensitive),
+                )
+            )
+        for agent_id in self.agents:
+            hosts.append(
+                HostInfo(
+                    id=agent_id,
+                    kind="agent",
+                    endpoint=f"in-process://{agent_id}",
+                    transport="in-process",
+                )
+            )
+        return hosts
 
 
 _RANGES: dict[str, Range] = {}
