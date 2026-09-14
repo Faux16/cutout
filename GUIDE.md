@@ -135,6 +135,18 @@ cutout > scan        # now reflects the live containers
 
 Or per-command with the one-shot CLI: `cutout run puppet --target http://127.0.0.1:8600`.
 
+**Recon a real MCP server (any authorized target).** Point `casing` at an arbitrary MCP
+server with an `mcp://` (or `mcp+http(s)://`) target — it connects with the official MCP
+client and enumerates the server's tools, schemas, and write/destructive hints:
+
+```bash
+cutout run casing --target mcp://host:port/mcp        # e.g. mcp://127.0.0.1:8790/mcp
+```
+
+Set `CUTOUT_MCP_TOKEN` to send an `Authorization: Bearer <token>` on the connection. This is
+recon only; the attack modules need a full range/agent target. **Only run this against MCP
+servers you own or are explicitly authorized to test.**
+
 With the networked range, planted state (RAG docs, shared memory) persists **server-side**
 between separate commands, so a chain composes across processes. Reset it with
 `docker compose restart`; tear it down with `docker compose down`.

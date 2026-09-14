@@ -25,6 +25,7 @@ from .tool_servers import (
 )
 
 if TYPE_CHECKING:
+    from .mcp_target import McpTarget
     from .remote import RemoteRange
 
 DELEGATED_TOKEN = "dgt_orch_7c1f9a2b"
@@ -163,11 +164,13 @@ def reset_ranges() -> None:
     _RANGES.clear()
 
 
-def connect_range(target: object) -> Range | RemoteRange:
+def connect_range(target: object) -> Range | RemoteRange | McpTarget:
     """Resolve a live range from a session target descriptor.
 
     Dispatch on ``target.uri``:
 
+    * ``mcp://…`` / ``mcp+http(s)://…`` -> a :class:`~cutout_range.mcp_target.McpTarget`,
+      a recon adapter for an arbitrary real MCP server (not the range);
     * an ``http(s)://`` URI  -> a :class:`~cutout_range.remote.RemoteRange` attacking the
       running networked stack at that orchestrator URL;
     * any other value        -> an in-process :class:`Range` (the URI, if given, is a state
@@ -176,9 +179,16 @@ def connect_range(target: object) -> Range | RemoteRange:
     """
     metadata = getattr(target, "metadata", {}) or {}
     uri = getattr(target, "uri", None)
-    if uri and str(uri).startswith("http"):
-        from .remote import RemoteRange
+    if uri:
+        u = str(uri)
+        if u.startswith(("mcp://", "mcp+http://", "mcp+https://")):
+            from .mcp_target import McpTarget
 
-        return RemoteRange(str(uri))
+            real = u[len("mcp+") :] if u.startswith("mcp+") else "http://" + u[len("mcp://") :]
+            return McpTarget(real)
+        if u.startswith("http"):
+            from .remote import RemoteRange
+
+            return RemoteRange(u)
     range_id = metadata.get("range_id") or getattr(target, "name", "default")
     return get_range(str(range_id), state_dir=uri)

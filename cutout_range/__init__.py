@@ -19,11 +19,15 @@ from __future__ import annotations
 
 from .agent import Orchestrator, OrchestratorResult
 from .corpus import Document, RagCorpus
+from .hosts import HostInfo
+from .mcp_target import McpTarget
 from .range import Range, connect_range, get_range, reset_ranges
 from .tool_servers import ToolResult, ToolServer, ToolSpec
 
 __all__ = [
     "Document",
+    "HostInfo",
+    "McpTarget",
     "Orchestrator",
     "OrchestratorResult",
     "RagCorpus",

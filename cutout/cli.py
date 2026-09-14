@@ -147,8 +147,9 @@ def run(
     target: str | None = typer.Option(
         None,
         "--target",
-        help="Target range: an http(s):// orchestrator URL (running stack), a state dir "
-        "(persistent in-process), or omit for a fresh in-memory range.",
+        help="Target: an http(s):// range orchestrator URL, an mcp://host:port/path "
+        "(recon a real MCP server, use with 'casing'), a state dir (persistent in-process), "
+        "or omit for a fresh in-memory range.",
     ),
     out: Path | None = typer.Option(
         None, "--out", help="Transcript path (default: runs/<id>-<ts>.jsonl)."
