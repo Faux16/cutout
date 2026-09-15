@@ -8,6 +8,8 @@
 
 # Cutout
 
+**CUTOUT** — **C**yber **U**tility & **T**radecraft, used **O**ffensively on **U**ntrusted AI **T**echnologies.
+
 **An offensive framework for authorized security testing of agentic AI systems** — it
 recons, exercises, persists in, and pivots across MCP servers, agent-to-agent chains, and
 tool-calling loops the way Metasploit maps onto a network, so defenders can find and fix
