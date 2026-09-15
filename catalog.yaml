@@ -49,6 +49,10 @@ techniques:
     name: Poisoned Instruction File
     tactic: PERS
     targets: [instr]
+  - id: CUT-CRED-003
+    name: Environment / Config Exfil
+    tactic: CRED
+    targets: [tool]
   # Next up (planned — no module yet):
   - id: CUT-DISC-001
     name: Post-Access Tool Discovery

@@ -302,11 +302,14 @@ techniques:
     status: planned
   - id: CUT-CRED-003
     name: Environment / Config Exfil
+    alias: keyring
     tactic: CRED
     layer: payloads
     targets: [tool]
-    desc: Read env vars / config via a filesystem or exec tool.
-    status: planned
+    desc: >-
+      Coerce the agent (confused deputy) to read credential-bearing files (.env, config)
+      through a filesystem tool with its own delegated token, then harvest the keys.
+    status: implemented
   - id: CUT-CRED-004
     name: MCP Server Credential Theft
     tactic: CRED
