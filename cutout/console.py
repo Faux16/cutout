@@ -45,11 +45,11 @@ from cutout.engine import (
 )
 from cutout.engine.errors import CutoutError
 
-BANNER = r"""   ___      _               _
-  / __\   _| |_ ___  _   _ | |_
- / / | | | | __/ _ \| | | || __|
-/ /__| |_| | || (_) | |_| || |_
-\____/\__,_|\__\___/ \__,_| \__|"""
+BANNER = r"""            _              _
+  ___ _   _| |_ ___  _   _| |_
+ / __| | | | __/ _ \| | | | __|
+| (__| |_| | || (_) | |_| | |_
+ \___|\__,_|\__\___/ \__,_|\__|"""
 
 
 class _Transcript:
@@ -693,23 +693,24 @@ class CutoutConsole(cmd.Cmd):
         if arg.strip():
             super().do_help(arg.strip())
             return
-        for title, cmds in self._HELP_GROUPS:
-            table = Table(
-                title=f"[bold]{title}[/bold]",
-                title_justify="left",
-                show_header=False,
-                box=None,
-                pad_edge=False,
-            )
-            table.add_column("cmd", style="bold cyan", no_wrap=True)
-            table.add_column("desc", style="white")
+        # One table for every group, so the description column aligns identically across
+        # categories; group headers are their own styled rows with a blank spacer above.
+        table = Table(show_header=False, box=None, pad_edge=False, padding=(0, 3, 0, 0))
+        table.add_column("cmd", style="bold cyan", no_wrap=True, min_width=9)
+        table.add_column("desc", style="white", overflow="fold")
+        for index, (title, cmds) in enumerate(self._HELP_GROUPS):
+            if index:
+                table.add_row("", "")
+            table.add_row(f"[bold yellow]{title.upper()}[/bold yellow]", "")
             for name in cmds:
                 doc = (getattr(self, f"do_{name}").__doc__ or "").strip().splitlines()[0]
                 desc = doc.split("—", 1)[1].strip() if "—" in doc else doc
-                table.add_row(name, desc)
-            self.console.print(table)
+                table.add_row(f"  {name}", f"[dim]{escape(desc)}[/dim]")
+        self.console.print()
+        self.console.print(table)
         self.console.print(
-            "[dim]tip: 'help <command>' for detail · workflow is scan → frisk → use → run[/dim]"
+            "\n[dim]tip:[/dim] [bold]help <command>[/bold] [dim]for detail  ·  "
+            "workflow:[/dim] scan → frisk → use → run\n"
         )
 
     def do_status(self, arg: str) -> None:
