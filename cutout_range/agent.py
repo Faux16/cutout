@@ -80,11 +80,15 @@ class Orchestrator:
         servers: dict[str, ToolServer],
         tool_index: dict[str, str],
         delegated_token: str,
+        instructions: list[str] | None = None,
     ) -> None:
         self._corpus = corpus
         self._servers = servers
         self._tool_index = tool_index  # tool name -> server id
         self._token = delegated_token
+        # Standing "system instructions" (a CLAUDE.md / system-prompt analogue) the agent
+        # reads on EVERY task and trusts implicitly — the CUT-PERS-003 poisoning surface.
+        self.instructions: list[str] = list(instructions) if instructions else []
 
     def _resolve(self, tool: str) -> tuple[str, str] | None:
         if "." in tool:
@@ -101,9 +105,17 @@ class Orchestrator:
         retrieved = self._corpus.search(task, k=3)
         result = OrchestratorResult(task=task, answer="", retrieved=[d.id for d in retrieved])
 
-        # THE VULNERABILITY: instructions are harvested from the task AND from retrieved
-        # (untrusted) documents with equal authority.
-        planned: list[PlannedAction] = _parse_actions(task, "task")
+        # THE VULNERABILITY: directives are harvested from the standing system
+        # instructions, the task, AND retrieved (untrusted) documents with equal authority.
+        planned: list[PlannedAction] = []
+        for instruction in self.instructions:
+            instr_actions = _parse_actions(instruction, "system-instructions")
+            if instr_actions:
+                result.obeyed_injected = True
+                if "system-instructions" not in result.injected_sources:
+                    result.injected_sources.append("system-instructions")
+            planned.extend(instr_actions)
+        planned.extend(_parse_actions(task, "task"))
         for doc in retrieved:
             doc_actions = _parse_actions(doc.text, f"retrieved-doc:{doc.id}")
             if doc_actions:
