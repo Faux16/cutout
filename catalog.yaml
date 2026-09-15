@@ -61,7 +61,6 @@ techniques:
     name: Conversation-Memory Implant
     tactic: PERS
     targets: [memory]
-  # Next up (planned — no module yet):
   - id: CUT-DISC-001
     name: Post-Access Tool Discovery
     tactic: DISC

@@ -207,6 +207,7 @@ whatever the agent sends — if injected content makes the agent ship data here,
 | Alias | ID | Does |
 |-------|----|------|
 | `casing` | `CUT-RECON-001` | Enumerate tools/schemas and map the topology (this is what `scan` runs). |
+| `recce` | `CUT-DISC-001` | Post-access discovery: enumerate peer-agent tools reachable from a foothold that initial recon can't see (e.g. `payments`). |
 | `frisk` | `CUT-DISC-004` | Probe tools for the resources they reach — local files (SQL `read_text`/`read_blob` or a path param), internal network (SSRF via fetch tools), and command/code execution (interpreter tools) — and safely confirm each with benign probes. |
 | `deaddrop` | `CUT-INJ-002` | Plant a poisoned document in the RAG corpus (delivery only). |
 | `puppet` | `CUT-EXEC-001` | A benign query retrieves the payload; the agent obeys it and harvests a secret. |

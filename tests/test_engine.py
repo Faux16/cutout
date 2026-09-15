@@ -71,12 +71,21 @@ async def test_check_mutation_is_detected() -> None:
         unregister("CUT-TEST-MUT")
 
 
-def test_catalog_marks_implemented_vs_planned() -> None:
+def test_catalog_marks_implemented_vs_planned(tmp_path: Path) -> None:
+    # The shipped catalog is fully implemented (every listed technique has a module).
     entries = {e.id: e for e in load_catalog()}
-    assert entries["CUT-INV-001"].implemented is True
     assert entries["CUT-RECON-001"].implemented is True
-    assert entries["CUT-LAT-001"].implemented is True
-    assert entries["CUT-EXFIL-001"].implemented is True
-    assert entries["CUT-LAT-002"].implemented is True
-    # A catalog entry with no registered module shows as planned.
-    assert entries["CUT-DISC-001"].implemented is False
+    assert entries["CUT-DISC-001"].implemented is True
+    assert all(e.implemented for e in entries.values())
+
+    # An entry with no registered module shows as planned.
+    fixture = tmp_path / "catalog.yaml"
+    fixture.write_text(
+        "techniques:\n"
+        "  - id: CUT-RECON-001\n    name: Tool Enumeration\n    tactic: RECON\n    targets: [mcp]\n"
+        "  - id: CUT-ZZZ-999\n    name: Not Built\n    tactic: RECON\n    targets: [mcp]\n",
+        encoding="utf-8",
+    )
+    planned = {e.id: e for e in load_catalog(fixture)}
+    assert planned["CUT-RECON-001"].implemented is True
+    assert planned["CUT-ZZZ-999"].implemented is False

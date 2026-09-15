@@ -325,11 +325,15 @@ techniques:
   # ---- DISC ----
   - id: CUT-DISC-001
     name: Post-Access Tool Discovery
+    alias: recce
     tactic: DISC
     layer: recon
     targets: [tool, mcp]
-    desc: Enumerate reachable tools once a foothold exists.
-    status: planned
+    desc: >-
+      From a foothold, enumerate the fuller reachable surface — peer agents' tools in their
+      own trust zones — that initial recon could not see (e.g. the payments server behind
+      the billing-agent).
+    status: implemented
   - id: CUT-DISC-002
     name: Data-Source Enumeration
     tactic: DISC
