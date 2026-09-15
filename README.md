@@ -120,14 +120,23 @@ not `use CUT-EXEC-001` (the ID stays canonical; the alias is the ergonomic handl
 | Alias | ID | Tactic | Technique |
 |-------|----|--------|-----------|
 | `casing` | `CUT-RECON-001` | Reconnaissance | Tool & schema enumeration, topology mapping |
+| `recce` | `CUT-DISC-001` | Discovery | Post-access tool discovery — peer-agent tools hidden from initial recon |
+| `frisk` | `CUT-DISC-004` | Discovery | Probe tools for reachable resources: file read, SSRF, command exec |
 | `deaddrop` | `CUT-INJ-002` | Initial Injection | Indirect injection via a poisoned RAG document |
 | `puppet` | `CUT-EXEC-001` | Execution | Coerced tool invocation → credential harvest |
+| `keyring` | `CUT-CRED-003` | Credential Access | Read `.env`/config via the agent's delegated token |
 | `sleeper` | `CUT-PERS-001` | Persistence | Durable RAG implant that re-triggers on any query |
+| `revenant` | `CUT-PERS-002` | Persistence | Memory implant — re-fires on every agent cycle from one write |
+| `handler` | `CUT-PERS-003` | Persistence | Poisoned instruction file — fires on every future task |
+| `dragnet` | `CUT-COLL-003` | Collection | Bulk-collect records + files, stage one bundle for exfil |
 | `courier` | `CUT-LAT-001` | Lateral Movement | Agent-to-agent propagation (direct A2A message) |
 | `brushpass` | `CUT-LAT-002` | Lateral Movement | Shared-memory pivot (indirect, via a store the peer reads) |
 | `siphon` | `CUT-EXFIL-001` | Exfiltration | Outbound tool-call exfil (data in a URL) |
+| `heist` | `CUT-IMP-001` | Impact | Unauthorized transaction, then verify + quantify via the ledger |
+| `rollcall` | `CUT-INV-001` | (plumbing) | Session inventory reference stub |
 
-`cutout catalog` shows the live implemented/planned split.
+**15 modules, every tactic** — `cutout catalog` shows the live implemented/planned split, and
+`cutout hunt <mcp-target>` chains recon → `frisk` → drafted findings against a real server.
 
 ## The range
 
@@ -202,8 +211,9 @@ systems, coordinated disclosure, and scope, see [ETHICS.md](ETHICS.md).
 
 ## Status & roadmap
 
-Phase 0 complete, Phase 1 underway — engine, console, seven techniques, and the offline +
-networked-MCP range all landed. See [ROADMAP.md](ROADMAP.md).
+Phase 0 complete, Phase 1 underway — engine, console, 15 modules across every tactic, the
+published CTX taxonomy page, and the offline + networked-MCP range all landed. See
+[ROADMAP.md](ROADMAP.md).
 
 ## License
 
