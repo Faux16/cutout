@@ -12,6 +12,9 @@ target (a real server or the bundled range), classify candidate tools and probe:
 * **SSRF** — outbound-fetch tools. Probe loopback (a closed high port) and TEST-NET-1
   (RFC 5737, reserved/unroutable): reaching either means no egress filtering — a
   server-side request forgery sink. Cloud metadata is deliberately *not* auto-probed.
+* **Command / code execution** — interpreter/shell tools. Send a benign computation whose
+  *result* is not in the payload (``print(a*b)`` / ``echo $((a*b))``): if the product comes
+  back, the tool executed it — a clean RCE confirmation with no side effects.
 
 This is the reusable form of a real finding: a read-only ``query`` tool that still
 permitted DuckDB ``read_text()`` / ``read_blob()`` was an arbitrary local file read
@@ -95,6 +98,35 @@ _SSRF_BLOCKED_MARKERS = (
     "not a public",
 )
 
+# Params / keywords that mark a tool as a command / code interpreter (exec sink).
+_EXEC_PARAMS = {"command", "cmd", "code", "script", "shell", "exec", "expression", "snippet"}
+_EXEC_WORDS = {
+    "execute",
+    "shell",
+    "bash",
+    "eval",
+    "interpreter",
+    "subprocess",
+    "terminal",
+    "run command",
+    "run code",
+    "arbitrary command",
+    "python code",
+    "code interpreter",
+}
+# A guard that refuses to run the command (as opposed to a per-payload syntax failure,
+# which is inconclusive — the other payload confirms).
+_EXEC_BLOCKED_MARKERS = (
+    "not allowed",
+    "blocked",
+    "forbidden",
+    "not permitted",
+    "denied",
+    "disabled",
+    "refused",
+    "execution is disabled",
+)
+
 # The server *tried to open* our made-up path -> the file-access capability is reachable.
 _REACHABLE_MARKERS = (
     "no such file",
@@ -151,6 +183,13 @@ def _fetch_param(spec: Any) -> str | None:
     return None
 
 
+def _exec_param(spec: Any) -> str | None:
+    for key in spec.params or {}:
+        if str(key).lower() in _EXEC_PARAMS:
+            return str(key)
+    return None
+
+
 def _classify(text: str) -> str:
     """Read a tool's error/output string as reachable | defended | inconclusive."""
     low = text.lower()
@@ -199,6 +238,23 @@ def _ssrf_verdict(res: dict[str, Any]) -> str:
     return "inconclusive"
 
 
+def _exec_verdict(res: dict[str, Any], marker: str) -> str:
+    """Read a command-exec probe as reachable | defended | inconclusive.
+
+    We send a benign computation whose *result* (``marker``) is not present in the
+    payload, so the marker appearing in the output can only mean the tool actually
+    executed the expression — a clean confirmation with no side effects. A per-payload
+    syntax/command error is inconclusive (the matching payload confirms); only an
+    explicit guard message reads as defended.
+    """
+    text = _envelope_text(res)
+    if marker in text:
+        return "reachable"
+    if any(m in text.lower() for m in _EXEC_BLOCKED_MARKERS):
+        return "defended"
+    return "inconclusive"
+
+
 def _envelope_text(res: dict[str, Any]) -> str:
     """Flatten a call envelope to the text we pattern-match on."""
     return f"{res.get('error', '')} {res.get('text', '')} {res.get('data', '')}"
@@ -219,15 +275,18 @@ class FilesystemDiscovery(BaseModule):
         ),
     }
 
-    def _candidates(self, specs: list[Any]) -> list[tuple[Any, str | None, str | None, str | None]]:
-        """Tools with a resource-reach signal, tagged with their sql/path/fetch param."""
-        out: list[tuple[Any, str | None, str | None, str | None]] = []
+    def _candidates(
+        self, specs: list[Any]
+    ) -> list[tuple[Any, str | None, str | None, str | None, str | None]]:
+        """Tools with a resource-reach signal, tagged with sql/path/fetch/exec param."""
+        out: list[tuple[Any, str | None, str | None, str | None, str | None]] = []
         for spec in specs:
             sql = _sql_param(spec) if _has_signal(spec, _SQL_PARAMS, _SQL_WORDS) else None
             path = _path_param(spec) if _has_signal(spec, _PATH_PARAMS, _PATH_WORDS) else None
             fetch = _fetch_param(spec) if _has_signal(spec, _FETCH_PARAMS, _FETCH_WORDS) else None
-            if sql or path or fetch:
-                out.append((spec, sql, path, fetch))
+            cmd = _exec_param(spec) if _has_signal(spec, _EXEC_PARAMS, _EXEC_WORDS) else None
+            if sql or path or fetch or cmd:
+                out.append((spec, sql, path, fetch, cmd))
         return out
 
     async def check(self, session: Session) -> CheckResult:
@@ -264,7 +323,7 @@ class FilesystemDiscovery(BaseModule):
         candidates = self._candidates(specs)
         findings: list[dict[str, Any]] = []
 
-        for spec, sql_key, path_key, fetch_key in candidates:
+        for spec, sql_key, path_key, fetch_key, exec_key in candidates:
             qualified = spec.qualified()
 
             # 1) SQL file-read: try DuckDB read_text/read_blob (missed by real denylists)
@@ -365,6 +424,40 @@ class FilesystemDiscovery(BaseModule):
                             ),
                         }
                     )
+
+            # 4) Command execution: send a benign computation whose *result* is not in the
+            #    payload (echo/print of a*b). If the product comes back, the tool executed
+            #    it — a clean RCE confirmation with no side effects. Try shell + python.
+            if exec_key and not any(f["tool"] == qualified for f in findings):
+                a, b = secrets.randbelow(9000) + 1000, secrets.randbelow(9000) + 1000
+                marker = str(a * b)
+                payloads = {
+                    "python": (f"print({a}*{b})", f"{exec_key}=print(<a>*<b>)"),
+                    "shell": (f"echo $(({a}*{b}))", f"{exec_key}=echo $((<a>*<b>))"),
+                }
+                for label, (payload, vector) in payloads.items():
+                    res = await self._call(rng, spec.name, {exec_key: payload})
+                    verdict = _exec_verdict(res, marker)
+                    await self.emit(
+                        Phase.RUN,
+                        "frisk.probe",
+                        {"tool": qualified, "vector": f"exec:{label}", "verdict": verdict},
+                    )
+                    if verdict == "reachable":
+                        findings.append(
+                            {
+                                "tool": qualified,
+                                "capability": "command / code execution",
+                                "vector": vector,
+                                "severity": "critical",
+                                "detail": (
+                                    "the tool evaluated an attacker-supplied expression and "
+                                    "returned the computed result — arbitrary command / code "
+                                    "execution candidate."
+                                ),
+                            }
+                        )
+                        break  # one confirmed exec vector per tool is enough
 
         for f in findings:
             session.graph.add_node(f["tool"], kind="tool", resource_reach=True)
