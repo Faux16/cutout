@@ -90,6 +90,18 @@ def test_scan_populates_hosts_and_services(tmp_path: Path) -> None:
     con.onecmd("services")
 
 
+def test_frisk_populates_findings(tmp_path: Path) -> None:
+    con = _console(tmp_path)
+    con.onecmd("frisk")
+    findings = con.session.artifacts.get("resource_findings")
+    assert findings  # confirmed at least one reachable resource on the range
+    tools = {f["tool"] for f in findings}
+    assert "fs-tools.read_file" in tools  # local file read
+    assert "external-fetch.http_get" in tools  # SSRF
+    # findings view renders without error
+    con.onecmd("findings")
+
+
 def test_unreachable_target_does_not_crash(tmp_path: Path) -> None:
     con = _console(tmp_path)
     con.onecmd("set TARGET http://127.0.0.1:1")  # nothing listening -> connection refused

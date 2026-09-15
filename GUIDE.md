@@ -54,6 +54,8 @@ The canonical loop — **scan → look → use → run → collect**:
 cutout > scan                # 1. recon: map the target (tools, servers, peer agents)
 cutout > hosts               # 2. look at the discovered hosts
 cutout > services            #    ...and the discovered tools (sensitive ones flagged)
+cutout > frisk               #    probe tools for reachable resources (file read, SSRF)
+cutout > findings            #    ...and review what frisk confirmed
 cutout > use deaddrop        # 3. pick a technique by alias (or #, ID, or name)
 cutout (deaddrop) > run      # 4. execute it
 cutout (deaddrop) > use puppet
@@ -71,6 +73,8 @@ cutout (puppet) > replay     #    the full evidence timeline
 | `scan` | Recon the target — enumerate servers, tools, and peer agents. Shortcut for `use casing; run`. |
 | `hosts` | Discovered hosts: orchestrator, MCP servers (with tool counts), peer agents. |
 | `services` | Discovered tools across the target, nmap-style, with a sensitivity flag. |
+| `frisk` | Probe tools for reachable resources — local file read and SSRF — with benign probes; streams a verdict per probe. Shortcut for `use frisk; run`. |
+| `findings` | Review the resource-reach findings `frisk` confirmed (tool, capability, severity, vector). |
 | `list` / `search <term>` | List modules (numbered); `search` filters by substring. |
 | `use <#\|alias\|id\|name>` | Select a module. `use 0`, `use puppet`, `use CUT-EXEC-001`, `use inject` all work. |
 | `info [module]` | Metadata + options for the selected (or named) module. |

@@ -264,6 +264,64 @@ class CutoutConsole(cmd.Cmd):
         self.console.print(f"[green]scan complete[/green] — {result.summary}")
         self.console.print("[dim]see 'hosts' and 'services'.[/dim]")
 
+    def do_frisk(self, arg: str) -> None:
+        """frisk — probe the target's tools for reachable resources (files, SSRF)."""
+        target = self.session.target.uri or "in-process range"
+        self.console.print(f"[dim]frisking[/dim] [bold]{target}[/bold] for reachable resources ...")
+        before = len(self.transcript.events)
+        try:
+            result = asyncio.run(self.engine.run("CUT-DISC-004"))
+        except (CutoutError, OptionError) as exc:
+            self._err(str(exc))
+            return
+        colors = {"reachable": "red", "defended": "green", "inconclusive": "dim"}
+        for event in self.transcript.events[before:]:
+            if event.action != "frisk.probe":
+                continue
+            d = event.data
+            verdict = d["verdict"]
+            color = colors.get(verdict, "white")
+            self.console.print(
+                f"  [{color}]{verdict:>12}[/{color}]  [cyan]{d['tool']:<28}[/cyan] "
+                f"[magenta]{d['vector']}[/magenta]"
+            )
+        findings = self.session.artifacts.get("resource_findings", [])
+        if findings:
+            for f in findings:
+                sev = f["severity"]
+                sev_color = {"high": "red", "medium": "yellow"}.get(sev, "white")
+                self.console.print(
+                    f"  [bold {sev_color}]! {sev.upper()}[/bold {sev_color}] {f['tool']} — "
+                    f"{f['capability']}"
+                )
+        status_color = "red" if findings else "green"
+        self.console.print(f"[{status_color}]frisk complete[/{status_color}] — {result.summary}")
+        self.console.print("[dim]see 'findings'.[/dim]")
+
+    def do_findings(self, arg: str) -> None:
+        """findings — resource-reach findings confirmed by 'frisk' (files, SSRF)."""
+        findings = self.session.artifacts.get("resource_findings")
+        if not findings:
+            self.console.print("[dim]no findings yet — run 'frisk' first[/dim]")
+            return
+        table = Table(title="Resource-reach findings")
+        table.add_column("Tool", style="bold cyan")
+        table.add_column("Capability")
+        table.add_column("Severity")
+        table.add_column("Vector", style="green")
+        table.add_column("Detail")
+        for f in findings:
+            sev = f["severity"]
+            sev_color = {"high": "red", "medium": "yellow"}.get(sev, "white")
+            table.add_row(
+                f["tool"],
+                f["capability"],
+                f"[{sev_color}]{sev}[/{sev_color}]",
+                f["vector"],
+                f["detail"],
+            )
+        self.console.print(table)
+
     def do_hosts(self, arg: str) -> None:
         """hosts — discovered hosts on the agent network, with address, transport, latency."""
         hosts = self.session.artifacts.get("hosts")
