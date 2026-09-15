@@ -57,6 +57,10 @@ techniques:
     name: Tool-Output Aggregation
     tactic: COLL
     targets: [tool]
+  - id: CUT-PERS-002
+    name: Conversation-Memory Implant
+    tactic: PERS
+    targets: [memory]
   # Next up (planned — no module yet):
   - id: CUT-DISC-001
     name: Post-Access Tool Discovery
