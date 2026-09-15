@@ -69,3 +69,7 @@ techniques:
     name: Unauthorized Action / Transaction
     tactic: IMP
     targets: [tool]
+  - id: CUT-EVAS-001
+    name: Guardrail Bypass / Jailbreak Encoding
+    tactic: EVAS
+    targets: [orchestrator]
