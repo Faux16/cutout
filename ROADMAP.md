@@ -30,8 +30,8 @@ Repo, engine, module loader, session, CLI + console, one recon module and one in
 payload working against a minimal range. Taxonomy v0.1 drafted.
 
 **Phase 1 — Core + range** (in progress)
-A broader module set across all six layers (15 CTX techniques implemented across every tactic,
-16 runnable modules), the complete range (done, incl. the networked MCP variant), replayable
+A broader module set across all six layers (16 CTX techniques implemented across every tactic,
+17 runnable modules), the complete range (done, incl. the networked MCP variant), replayable
 evidence (done), and the taxonomy published as a page (done — `docs/index.html`). Remaining:
 more techniques per layer; a strong README + demo.
 

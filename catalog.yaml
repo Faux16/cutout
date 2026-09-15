@@ -73,3 +73,7 @@ techniques:
     name: Guardrail Bypass / Jailbreak Encoding
     tactic: EVAS
     targets: [orchestrator]
+  - id: CUT-PRIV-002
+    name: Scope Escalation via Chaining
+    tactic: PRIV
+    targets: [tool]
