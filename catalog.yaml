@@ -65,3 +65,7 @@ techniques:
     name: Post-Access Tool Discovery
     tactic: DISC
     targets: [tool, mcp]
+  - id: CUT-IMP-001
+    name: Unauthorized Action / Transaction
+    tactic: IMP
+    targets: [tool]

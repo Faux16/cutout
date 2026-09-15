@@ -476,11 +476,14 @@ techniques:
   # ---- IMP ----
   - id: CUT-IMP-001
     name: Unauthorized Action / Transaction
+    alias: heist
     tactic: IMP
     layer: payloads
     targets: [tool]
-    desc: Cause a real unauthorized action (payment, deletion, send).
-    status: planned
+    desc: >-
+      Drive a money-moving tool through the peer that holds it, N times, as the objective —
+      then read the ledger back to confirm and quantify the damage (count + total moved).
+    status: implemented
   - id: CUT-IMP-002
     name: Data Destruction / Corruption
     tactic: IMP
