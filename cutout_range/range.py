@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 from .agent import A2AResult, Orchestrator, PeerAgent
 from .corpus import Document, RagCorpus
+from .guardrail import Guardrail, default_guardrail
 from .hosts import HostInfo
 from .memory import MemoryNote
 from .tool_servers import (
@@ -109,6 +110,20 @@ class Range:
         CUT-PERS-003 (poisoned instruction file / system-prompt).
         """
         self.orchestrator.instructions.append(text)
+
+    def install_guardrail(self, guardrail: Guardrail | None = None) -> Guardrail:
+        """Bolt an input-inspection guardrail onto the orchestrator (the CUT-EVAS-001 SUT).
+
+        Defaults to the naive raw-text filter. Returns the installed guardrail so a caller
+        can restore the prior one afterwards.
+        """
+        gr = guardrail or default_guardrail()
+        self.orchestrator.guardrail = gr
+        return gr
+
+    def clear_guardrail(self) -> None:
+        """Remove any installed guardrail (restore the no-filtering default posture)."""
+        self.orchestrator.guardrail = None
 
     async def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
         """Invoke a tool by name with attacker-controlled args, unauthenticated.

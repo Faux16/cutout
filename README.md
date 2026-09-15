@@ -133,9 +133,10 @@ not `use CUT-EXEC-001` (the ID stays canonical; the alias is the ergonomic handl
 | `brushpass` | `CUT-LAT-002` | Lateral Movement | Shared-memory pivot (indirect, via a store the peer reads) |
 | `siphon` | `CUT-EXFIL-001` | Exfiltration | Outbound tool-call exfil (data in a URL) |
 | `heist` | `CUT-IMP-001` | Impact | Unauthorized transaction, then verify + quantify via the ledger |
+| `smuggler` | `CUT-EVAS-001` | Defense Evasion | Encode a directive (base64 / zero-width / homoglyph) past a raw-text guardrail |
 | `rollcall` | `CUT-INV-001` | (plumbing) | Session inventory reference stub |
 
-**15 modules, every tactic** — `cutout catalog` shows the live implemented/planned split, and
+**16 modules, every tactic** — `cutout catalog` shows the live implemented/planned split, and
 `cutout hunt <mcp-target>` chains recon → `frisk` → drafted findings against a real server.
 
 ## The range
@@ -211,7 +212,7 @@ systems, coordinated disclosure, and scope, see [ETHICS.md](ETHICS.md).
 
 ## Status & roadmap
 
-Phase 0 complete, Phase 1 underway — engine, console, 15 modules across every tactic, the
+Phase 0 complete, Phase 1 underway — engine, console, 16 modules across every tactic, the
 published CTX taxonomy page, and the offline + networked-MCP range all landed. See
 [ROADMAP.md](ROADMAP.md).
 

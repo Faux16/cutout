@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
+from .guardrail import Guardrail, normalize
 from .memory import MemoryNote, SharedMemory
 
 if TYPE_CHECKING:
@@ -51,6 +52,9 @@ class OrchestratorResult(BaseModel):
     tool_calls: list[dict[str, Any]] = Field(default_factory=list)
     obeyed_injected: bool = False
     injected_sources: list[str] = Field(default_factory=list)
+    # Context pieces an installed guardrail refused (their directives never ran).
+    blocked_sources: list[str] = Field(default_factory=list)
+    guardrail: str | None = None  # name of the active guardrail, if any
 
 
 class A2AResult(BaseModel):
@@ -81,6 +85,7 @@ class Orchestrator:
         tool_index: dict[str, str],
         delegated_token: str,
         instructions: list[str] | None = None,
+        guardrail: Guardrail | None = None,
     ) -> None:
         self._corpus = corpus
         self._servers = servers
@@ -89,6 +94,11 @@ class Orchestrator:
         # Standing "system instructions" (a CLAUDE.md / system-prompt analogue) the agent
         # reads on EVERY task and trusts implicitly — the CUT-PERS-003 poisoning surface.
         self.instructions: list[str] = list(instructions) if instructions else []
+        # Optional input-inspection guardrail. None = no filtering (the default posture);
+        # when installed it refuses context whose RAW text trips its patterns — which the
+        # CUT-EVAS-001 encodings are built to slip past. The agent still acts on the
+        # NORMALIZED text, which is exactly the gap that makes a raw filter bypassable.
+        self.guardrail: Guardrail | None = guardrail
 
     def _resolve(self, tool: str) -> tuple[str, str] | None:
         if "." in tool:
@@ -101,23 +111,47 @@ class Orchestrator:
             return None
         return mapped, tool
 
+    def _admit(self, text: str, source: str, result: OrchestratorResult) -> str | None:
+        """Run an installed guardrail over one raw context piece.
+
+        Returns the text the agent will actually read (NORMALIZED — decoded/de-obfuscated),
+        or ``None`` if the guardrail refused it. The guardrail inspects the *raw* bytes;
+        the agent acts on the *normalized* text. That asymmetry is the bug: an encoded
+        directive reads as noise to the filter but is plain to the model.
+        """
+        if self.guardrail is not None and self.guardrail.inspect(text).blocked:
+            result.blocked_sources.append(source)
+            return None
+        return normalize(text)
+
     async def handle(self, task: str) -> OrchestratorResult:
         retrieved = self._corpus.search(task, k=3)
         result = OrchestratorResult(task=task, answer="", retrieved=[d.id for d in retrieved])
+        if self.guardrail is not None:
+            result.guardrail = self.guardrail.name
 
         # THE VULNERABILITY: directives are harvested from the standing system
         # instructions, the task, AND retrieved (untrusted) documents with equal authority.
         planned: list[PlannedAction] = []
         for instruction in self.instructions:
-            instr_actions = _parse_actions(instruction, "system-instructions")
+            admitted = self._admit(instruction, "system-instructions", result)
+            if admitted is None:
+                continue
+            instr_actions = _parse_actions(admitted, "system-instructions")
             if instr_actions:
                 result.obeyed_injected = True
                 if "system-instructions" not in result.injected_sources:
                     result.injected_sources.append("system-instructions")
             planned.extend(instr_actions)
-        planned.extend(_parse_actions(task, "task"))
+        admitted_task = self._admit(task, "task", result)
+        if admitted_task is not None:
+            planned.extend(_parse_actions(admitted_task, "task"))
         for doc in retrieved:
-            doc_actions = _parse_actions(doc.text, f"retrieved-doc:{doc.id}")
+            source = f"retrieved-doc:{doc.id}"
+            admitted_doc = self._admit(doc.text, source, result)
+            if admitted_doc is None:
+                continue
+            doc_actions = _parse_actions(admitted_doc, source)
             if doc_actions:
                 result.obeyed_injected = True
                 result.injected_sources.append(doc.id)

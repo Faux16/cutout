@@ -19,6 +19,15 @@ from __future__ import annotations
 
 from .agent import Orchestrator, OrchestratorResult
 from .corpus import Document, RagCorpus
+from .guardrail import (
+    Guardrail,
+    GuardrailVerdict,
+    default_guardrail,
+    normalize,
+    to_base64_marker,
+    to_homoglyph,
+    to_zero_width,
+)
 from .hosts import HostInfo
 from .mcp_target import McpTarget
 from .range import Range, connect_range, get_range, reset_ranges
@@ -26,6 +35,8 @@ from .tool_servers import ToolResult, ToolServer, ToolSpec
 
 __all__ = [
     "Document",
+    "Guardrail",
+    "GuardrailVerdict",
     "HostInfo",
     "McpTarget",
     "Orchestrator",
@@ -36,6 +47,11 @@ __all__ = [
     "ToolServer",
     "ToolSpec",
     "connect_range",
+    "default_guardrail",
     "get_range",
+    "normalize",
     "reset_ranges",
+    "to_base64_marker",
+    "to_homoglyph",
+    "to_zero_width",
 ]

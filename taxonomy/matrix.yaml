@@ -255,11 +255,16 @@ techniques:
   # ---- EVAS ----
   - id: CUT-EVAS-001
     name: Guardrail Bypass / Jailbreak Encoding
+    alias: smuggler
     tactic: EVAS
     layer: payloads
     targets: [orchestrator]
-    desc: Encode the payload to bypass input/output guardrails.
-    status: planned
+    desc: >-
+      Confirm a raw-text guardrail blocks the plain directive, then re-deliver the same
+      directive under base64, zero-width, and homoglyph encodings the filter misses but the
+      agent still normalizes and obeys — the gap between inspecting raw bytes and acting on
+      canonicalized text. Mitigation: normalize before you inspect; authorize the tool call.
+    status: implemented
   - id: CUT-EVAS-002
     name: Instruction-in-Data Obfuscation
     tactic: EVAS
