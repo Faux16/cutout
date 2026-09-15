@@ -45,6 +45,10 @@ techniques:
     name: Resource / Filesystem Discovery
     tactic: DISC
     targets: [tool, mcp]
+  - id: CUT-PERS-003
+    name: Poisoned Instruction File
+    tactic: PERS
+    targets: [instr]
   # Next up (planned — no module yet):
   - id: CUT-DISC-001
     name: Post-Access Tool Discovery

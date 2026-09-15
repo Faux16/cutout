@@ -180,11 +180,15 @@ techniques:
     status: planned
   - id: CUT-PERS-003
     name: Poisoned Instruction File
+    alias: handler
     tactic: PERS
     layer: persistence
     targets: [instr]
-    desc: Modify CLAUDE.md / skills / system-prompt files read at every start.
-    status: planned
+    desc: >-
+      Poison the agent's standing instructions (CLAUDE.md / system-prompt), read on every
+      task and trusted implicitly, so the directive fires on all future requests —
+      task-independently, unlike a retrieval-triggered RAG implant.
+    status: implemented
   - id: CUT-PERS-004
     name: Persistent Tool-Description Poison
     tactic: PERS
