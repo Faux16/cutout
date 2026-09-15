@@ -1,22 +1,23 @@
 """CUT-DISC-004 — Resource / Filesystem Discovery.
 
-*Frisk* a target's tools for filesystem reach. Given a recon'd MCP target — a real
-server or the bundled range — classify the tools that can touch the filesystem (SQL
-query tools that expose DuckDB/SQLite file functions, and path-taking file tools) and
-then *safely confirm* the capability with a benign, non-existent probe path:
+*Frisk* a target's tools for the resources they can reach — local files and internal
+network — and *safely confirm* each capability with benign probes. Given a recon'd MCP
+target (a real server or the bundled range), classify candidate tools and probe:
 
-* if the server tries to open the path and comes back "no such file", the capability is
-  **reachable** — an arbitrary-file-read candidate;
-* if input validation refuses the payload first, it is **defended**.
-
-The probe reads no real file. It only distinguishes "the server tried to open my
-made-up path" from "the server refused before touching the disk" — a clean oracle with
-no data exposure.
+* **Local file read** — SQL query tools exposing DuckDB/SQLite file functions
+  (``read_text``/``read_blob``), and path-taking file tools. Probe a benign, non-existent
+  path: a function that *executes* while another is *blocked* (or a "no such file" from a
+  path tool) is a file-read candidate; a validation refusal is defended. No real file is
+  read — the oracle only distinguishes "tried to open" from "refused".
+* **SSRF** — outbound-fetch tools. Probe loopback (a closed high port) and TEST-NET-1
+  (RFC 5737, reserved/unroutable): reaching either means no egress filtering — a
+  server-side request forgery sink. Cloud metadata is deliberately *not* auto-probed.
 
 This is the reusable form of a real finding: a read-only ``query`` tool that still
 permitted DuckDB ``read_text()`` / ``read_blob()`` was an arbitrary local file read
 (the project's own filesystem denylist omitted those two functions). ``frisk`` re-finds
-that class automatically, and the range's ``fs-tools.read_file`` is the offline analogue.
+that class automatically; the range's ``fs-tools.read_file`` and ``external-fetch.http_get``
+are the offline analogues.
 """
 
 from __future__ import annotations
@@ -42,6 +43,57 @@ _PATH_WORDS = {"read_file", "readfile", "file", "path", "filesystem", "read a fi
 # DuckDB file-reading table functions to try inside a SELECT. read_text/read_blob are the
 # ones real denylists forget; read_csv is the "usually blocked" control.
 _SQL_FILE_FUNCS = ("read_text", "read_blob", "read_csv")
+
+# Params / keywords that mark a tool as an outbound-fetch tool (a possible SSRF sink).
+_FETCH_PARAMS = {"url", "uri", "endpoint", "link", "href", "address"}
+_FETCH_WORDS = {"fetch", "http", "https", "request", "curl", "download", "webhook"}
+
+# Benign SSRF probe targets. Loopback on a random closed high port proves the tool will
+# reach *internal* services; TEST-NET-1 (192.0.2.0/24, RFC 5737, reserved for docs and
+# guaranteed unroutable) proves it will fetch an arbitrary external host. Reaching either
+# means no egress filtering. We deliberately do NOT auto-probe cloud metadata
+# (169.254.169.254): reaching loopback already confirms the capability, without risking
+# exfiltration of real instance credentials from a target under test.
+# NB: the probe path must not contain any _SSRF_BLOCKED_MARKERS substring (e.g. "ssrf") —
+# tools echo the URL back, which would otherwise self-match and read as "defended".
+_SSRF_PROBES = (
+    ("loopback", "http://127.0.0.1:{port}/cutout-probe"),
+    ("reserved", "http://192.0.2.1/cutout-probe"),
+)
+# The tool attempted an outbound request to our internal/reserved target (no filtering).
+_SSRF_ATTEMPTED_MARKERS = (
+    "connection refused",
+    "connection error",
+    "connection reset",
+    "failed to connect",
+    "could not connect",
+    "no route to host",
+    "timed out",
+    "timeout",
+    "max retries",
+    "econnrefused",
+    "name or service not known",
+    "temporary failure in name resolution",
+    "connectionerror",
+)
+# The tool refused the internal/reserved destination (egress filtering / SSRF guard).
+_SSRF_BLOCKED_MARKERS = (
+    "not allowed",
+    "blocked",
+    "forbidden",
+    "not permitted",
+    "denied",
+    "disallowed",
+    "invalid url",
+    "invalid host",
+    "private",
+    "internal address",
+    "link-local",
+    "must be http",
+    "ssrf",
+    "refused to fetch",
+    "not a public",
+)
 
 # The server *tried to open* our made-up path -> the file-access capability is reachable.
 _REACHABLE_MARKERS = (
@@ -92,6 +144,13 @@ def _path_param(spec: Any) -> str | None:
     return None
 
 
+def _fetch_param(spec: Any) -> str | None:
+    for key in spec.params or {}:
+        if str(key).lower() in _FETCH_PARAMS:
+            return str(key)
+    return None
+
+
 def _classify(text: str) -> str:
     """Read a tool's error/output string as reachable | defended | inconclusive."""
     low = text.lower()
@@ -121,6 +180,25 @@ def _sql_verdict(res: dict[str, Any]) -> str:
     return "inconclusive"
 
 
+def _ssrf_verdict(res: dict[str, Any]) -> str:
+    """Read an SSRF probe as reachable | defended | inconclusive.
+
+    The target is internal (loopback) or reserved (TEST-NET), so a fetch tool with no
+    egress filtering either returns a response (mocked ranges, or a live internal
+    service) or *attempts* the connection and fails at the socket layer (connection
+    refused / timeout) — both prove it tried. A tool with an SSRF guard refuses the
+    destination outright.
+    """
+    low = _envelope_text(res).lower()
+    if any(m in low for m in _SSRF_BLOCKED_MARKERS):
+        return "defended"
+    if res.get("ok"):
+        return "reachable"  # returned a response for an internal/reserved target
+    if any(m in low for m in _SSRF_ATTEMPTED_MARKERS):
+        return "reachable"  # attempted the outbound request to an internal/reserved host
+    return "inconclusive"
+
+
 def _envelope_text(res: dict[str, Any]) -> str:
     """Flatten a call envelope to the text we pattern-match on."""
     return f"{res.get('error', '')} {res.get('text', '')} {res.get('data', '')}"
@@ -141,28 +219,29 @@ class FilesystemDiscovery(BaseModule):
         ),
     }
 
-    def _candidates(self, specs: list[Any]) -> list[tuple[Any, str | None, str | None]]:
-        """Tools with a filesystem-reach signal, tagged with their sql/path param."""
-        out: list[tuple[Any, str | None, str | None]] = []
+    def _candidates(self, specs: list[Any]) -> list[tuple[Any, str | None, str | None, str | None]]:
+        """Tools with a resource-reach signal, tagged with their sql/path/fetch param."""
+        out: list[tuple[Any, str | None, str | None, str | None]] = []
         for spec in specs:
             sql = _sql_param(spec) if _has_signal(spec, _SQL_PARAMS, _SQL_WORDS) else None
             path = _path_param(spec) if _has_signal(spec, _PATH_PARAMS, _PATH_WORDS) else None
-            if sql or path:
-                out.append((spec, sql, path))
+            fetch = _fetch_param(spec) if _has_signal(spec, _FETCH_PARAMS, _FETCH_WORDS) else None
+            if sql or path or fetch:
+                out.append((spec, sql, path, fetch))
         return out
 
     async def check(self, session: Session) -> CheckResult:
         rng = connect_range(session.target)
         specs = rng.list_tools()
         candidates = self._candidates(specs)
-        names = [s.qualified() for s, _, _ in candidates]
+        names = [s.qualified() for s, *_ in candidates]
         return CheckResult(
             module_id=self.id,
             susceptible=bool(candidates),
             reason=(
-                f"{len(candidates)} tool(s) with filesystem-reach potential: {', '.join(names)}"
+                f"{len(candidates)} tool(s) with resource-reach potential: {', '.join(names)}"
                 if candidates
-                else "no tools expose a query/path parameter"
+                else "no tools expose a query/path/url parameter"
             ),
             data={"candidates": names},
         )
@@ -185,7 +264,7 @@ class FilesystemDiscovery(BaseModule):
         candidates = self._candidates(specs)
         findings: list[dict[str, Any]] = []
 
-        for spec, sql_key, path_key in candidates:
+        for spec, sql_key, path_key, fetch_key in candidates:
             qualified = spec.qualified()
 
             # 1) SQL file-read: try DuckDB read_text/read_blob (missed by real denylists)
@@ -249,9 +328,47 @@ class FilesystemDiscovery(BaseModule):
                         }
                     )
 
+            # 3) SSRF: will an outbound-fetch tool reach internal / arbitrary hosts?
+            #    Probe loopback (internal services) and TEST-NET (arbitrary external) —
+            #    both benign. No filtering on either is a server-side request forgery sink.
+            if fetch_key and not any(f["tool"] == qualified for f in findings):
+                reached: list[str] = []
+                for label, tmpl in _SSRF_PROBES:
+                    url = tmpl.format(port=secrets.randbelow(20000) + 40000)
+                    res = await self._call(rng, spec.name, {fetch_key: url})
+                    verdict = _ssrf_verdict(res)
+                    await self.emit(
+                        Phase.RUN,
+                        "frisk.probe",
+                        {"tool": qualified, "vector": f"ssrf:{label}", "verdict": verdict},
+                    )
+                    if verdict == "reachable":
+                        reached.append(label)
+                if reached:
+                    loopback = "loopback" in reached
+                    findings.append(
+                        {
+                            "tool": qualified,
+                            "capability": "server-side request forgery (outbound fetch)",
+                            "vector": f"{fetch_key}=http://<internal-or-reserved-host>/",
+                            "reached": reached,
+                            "severity": "high" if loopback else "medium",
+                            "detail": (
+                                f"the fetch tool reached {', '.join(reached)} target(s) with "
+                                "no egress filtering — SSRF candidate"
+                                + (
+                                    " (internal services / cloud metadata reachable)."
+                                    if loopback
+                                    else " (arbitrary external fetch; internal filtering "
+                                    "unconfirmed)."
+                                )
+                            ),
+                        }
+                    )
+
         for f in findings:
-            session.graph.add_node(f["tool"], kind="tool", filesystem_reach=True)
-        session.artifacts["filesystem_findings"] = findings
+            session.graph.add_node(f["tool"], kind="tool", resource_reach=True)
+        session.artifacts["resource_findings"] = findings
 
         await self.emit(
             Phase.RUN,
@@ -260,11 +377,11 @@ class FilesystemDiscovery(BaseModule):
         )
         status = "success" if candidates else "skipped"
         if findings:
-            hot = ", ".join(f["tool"] for f in findings)
+            hot = ", ".join(f"{f['tool']} ({f['capability'].split(' (')[0]})" for f in findings)
             summary = (
-                f"filesystem reach CONFIRMED on {len(findings)}/{len(candidates)} "
+                f"resource reach CONFIRMED on {len(findings)}/{len(candidates)} "
                 f"candidate tool(s): {hot}"
             )
         else:
-            summary = f"probed {len(candidates)} candidate tool(s); no filesystem reach confirmed"
+            summary = f"probed {len(candidates)} candidate tool(s); no resource reach confirmed"
         return RunResult(status=status, summary=summary, data={"findings": findings})

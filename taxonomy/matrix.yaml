@@ -340,9 +340,11 @@ techniques:
     layer: recon
     targets: [tool, mcp]
     desc: >-
-      Frisk a target's tools for filesystem reach and safely confirm it with a benign
-      non-existent probe path (SQL file functions like read_text/read_blob, or a path
-      parameter). File-not-found => reachable (file-read candidate); refused => defended.
+      Frisk a target's tools for the resources they can reach — local files (SQL file
+      functions like read_text/read_blob, or a path parameter) and internal network
+      (SSRF via outbound-fetch tools) — and safely confirm each with benign probes
+      (a non-existent path; loopback / TEST-NET URLs). Reachable => candidate; refused
+      => defended.
     status: implemented
 
   # ---- LAT ----
