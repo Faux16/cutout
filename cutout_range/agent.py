@@ -24,7 +24,7 @@ from .memory import MemoryNote, SharedMemory
 
 if TYPE_CHECKING:
     from .corpus import RagCorpus
-    from .tool_servers import ToolServer
+    from .tool_servers import ToolServer, ToolSpec
 
 _ACTION = re.compile(r"^\s*ACTION:\s*([\w.\-]+)\s*(.*)$", re.MULTILINE)
 _KV = re.compile(r"(\w+)=(\S+)")
@@ -205,6 +205,13 @@ class PeerAgent:
                 }
             )
         return calls
+
+    def list_tools(self) -> list[ToolSpec]:
+        """Every tool this peer exposes across its servers (its trust zone's surface)."""
+        specs: list[ToolSpec] = []
+        for server in self._servers.values():
+            specs.extend(server.list_tools())
+        return specs
 
     async def receive(self, message_from: str, text: str) -> A2AResult:
         result = A2AResult(agent=self.id, message_from=message_from)
