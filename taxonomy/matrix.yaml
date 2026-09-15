@@ -418,11 +418,14 @@ techniques:
     status: planned
   - id: CUT-COLL-003
     name: Tool-Output Aggregation
+    alias: dragnet
     tactic: COLL
     layer: payloads
     targets: [tool]
-    desc: Aggregate sensitive data returned across tool calls.
-    status: planned
+    desc: >-
+      Sweep the target's read/list tools to bulk-collect records and files, fold in prior
+      loot, and stage one consolidated bundle for exfil; note protected sources refused.
+    status: implemented
 
   # ---- EXFIL ----
   - id: CUT-EXFIL-001

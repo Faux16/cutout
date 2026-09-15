@@ -53,6 +53,10 @@ techniques:
     name: Environment / Config Exfil
     tactic: CRED
     targets: [tool]
+  - id: CUT-COLL-003
+    name: Tool-Output Aggregation
+    tactic: COLL
+    targets: [tool]
   # Next up (planned — no module yet):
   - id: CUT-DISC-001
     name: Post-Access Tool Discovery
