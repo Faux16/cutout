@@ -19,6 +19,7 @@ from .memory import MemoryNote
 from .tool_servers import (
     CommandServer,
     CustomerDataServer,
+    ExportServer,
     ExternalFetchServer,
     FilesystemToolServer,
     PaymentsServer,
@@ -67,6 +68,7 @@ class Range:
                 FilesystemToolServer(DELEGATED_TOKEN),
                 ExternalFetchServer(),
                 CommandServer(),
+                ExportServer(),
             )
         }
         self.tool_index: dict[str, str] = {

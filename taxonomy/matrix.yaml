@@ -225,11 +225,17 @@ techniques:
     status: planned
   - id: CUT-PRIV-002
     name: Scope Escalation via Chaining
+    alias: ladder
     tactic: PRIV
     layer: lateral
     targets: [tool]
-    desc: Combine low-scope tools to achieve a higher-scope effect.
-    status: planned
+    desc: >-
+      Chain individually low-scope, non-sensitive tools (a capability-by-reference pair — one
+      mints a handle to a resource, another redeems it) to reach data the directly-scoped tool
+      gates behind a credential. Refused-direct vs granted-by-chain for the same principal is
+      the escalation. Mitigation: propagate the caller's scope through the whole chain and
+      authorize at both ends against the principal, not the bearer handle.
+    status: implemented
   - id: CUT-PRIV-003
     name: Approval Farming (HITL)
     tactic: PRIV

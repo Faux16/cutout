@@ -74,8 +74,8 @@ then `use` a module and `run`. Modules go by memorable aliases (`puppet`, not
 
 ```
 cutout > scan
-scan complete — enumerated 6 tools (2 sensitive) across 3 servers; 1 peer agent(s)
-cutout > hosts        # orchestrator + 3 MCP servers + the billing-agent peer
+scan complete — enumerated 10 tools (3 sensitive) across 5 servers; 1 peer agent(s)
+cutout > hosts        # orchestrator + 5 MCP servers + the billing-agent peer
 cutout > services     # every tool, sensitive ones flagged
 cutout > use deaddrop
 cutout (deaddrop) > run
@@ -135,10 +135,11 @@ not `use CUT-EXEC-001` (the ID stays canonical; the alias is the ergonomic handl
 | `brushpass` | `CUT-LAT-002` | Lateral Movement | Shared-memory pivot (indirect, via a store the peer reads) |
 | `siphon` | `CUT-EXFIL-001` | Exfiltration | Outbound tool-call exfil (data in a URL) |
 | `heist` | `CUT-IMP-001` | Impact | Unauthorized transaction, then verify + quantify via the ledger |
+| `ladder` | `CUT-PRIV-002` | Privilege Escalation | Chain low-scope tools (mint an export handle → redeem it) to reach data a scoped tool gates |
 | `smuggler` | `CUT-EVAS-001` | Defense Evasion | Encode a directive (base64 / zero-width / homoglyph) past a raw-text guardrail |
 | `rollcall` | `CUT-INV-001` | (plumbing) | Session inventory reference stub |
 
-**16 modules, every tactic** — `cutout catalog` shows the live implemented/planned split, and
+**17 modules, every tactic** — `cutout catalog` shows the live implemented/planned split, and
 `cutout hunt <mcp-target>` chains recon → `frisk` → drafted findings against a real server.
 
 ## The range
@@ -147,7 +148,9 @@ A deliberately-vulnerable multi-agent stack, shipped with the framework. Its wea
 each map to a technique:
 
 - an **orchestrator agent** with no trust boundary between retrieved data and instructions;
-- three **MCP tool servers** (`customer-data` holding secrets, `fs-tools`, `external-fetch`);
+- five **MCP tool servers** — `customer-data` (holds secrets), `fs-tools`, `external-fetch`,
+  `code-exec` (an interpreter/RCE surface), and `reports` (a broad-access export subsystem
+  whose low-scope tools chain into a privilege escalation);
 - a poisonable, unauthenticated **RAG corpus**;
 - a **billing-agent** in its own trust zone with a privileged `payments` tool the
   orchestrator cannot reach — and a world-writable **shared memory** it reads.
@@ -214,7 +217,7 @@ systems, coordinated disclosure, and scope, see [ETHICS.md](ETHICS.md).
 
 ## Status & roadmap
 
-Phase 0 complete, Phase 1 underway — engine, console, 16 modules across every tactic, the
+Phase 0 complete, Phase 1 underway — engine, console, 17 modules across every tactic, the
 published CTX taxonomy page, and the offline + networked-MCP range all landed. See
 [ROADMAP.md](ROADMAP.md).
 
