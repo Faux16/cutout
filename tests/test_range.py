@@ -8,6 +8,17 @@ from cutout_range import Range
 from cutout_range.range import DELEGATED_TOKEN
 
 
+async def test_command_server_is_arithmetic_only_sandbox() -> None:
+    # The range's "code interpreter" models an RCE surface but is a SAFE arithmetic-only
+    # evaluator: it computes expressions, and refuses anything with names/calls/imports.
+    rng = Range()
+    ok = await rng.call_tool("run_python", {"code": "print(6*7)"})
+    assert ok["ok"] and ok["data"] == "42"
+    for danger in ("__import__('os').system('id')", "open('/etc/passwd').read()", "1+len('x')"):
+        res = await rng.call_tool("run_python", {"code": danger})
+        assert res["ok"] is False  # never executes real code
+
+
 async def test_benign_task_triggers_no_tool_calls() -> None:
     rng = Range()
     result = await rng.orchestrator.handle("What is your refund policy?")

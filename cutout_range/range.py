@@ -16,6 +16,7 @@ from .corpus import Document, RagCorpus
 from .hosts import HostInfo
 from .memory import MemoryNote
 from .tool_servers import (
+    CommandServer,
     CustomerDataServer,
     ExternalFetchServer,
     FilesystemToolServer,
@@ -64,6 +65,7 @@ class Range:
                 CustomerDataServer(DELEGATED_TOKEN),
                 FilesystemToolServer(DELEGATED_TOKEN),
                 ExternalFetchServer(),
+                CommandServer(),
             )
         }
         self.tool_index: dict[str, str] = {

@@ -289,7 +289,7 @@ class CutoutConsole(cmd.Cmd):
         if findings:
             for f in findings:
                 sev = f["severity"]
-                sev_color = {"high": "red", "medium": "yellow"}.get(sev, "white")
+                sev_color = {"critical": "red", "high": "red", "medium": "yellow"}.get(sev, "white")
                 self.console.print(
                     f"  [bold {sev_color}]! {sev.upper()}[/bold {sev_color}] {f['tool']} — "
                     f"{f['capability']}"
@@ -312,7 +312,7 @@ class CutoutConsole(cmd.Cmd):
         table.add_column("Detail")
         for f in findings:
             sev = f["severity"]
-            sev_color = {"high": "red", "medium": "yellow"}.get(sev, "white")
+            sev_color = {"critical": "red", "high": "red", "medium": "yellow"}.get(sev, "white")
             table.add_row(
                 f["tool"],
                 f["capability"],

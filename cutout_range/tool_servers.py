@@ -9,6 +9,10 @@ the agent (which does) into using it.
 
 from __future__ import annotations
 
+import ast
+import operator
+import re
+from collections.abc import Callable
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -247,3 +251,75 @@ class PaymentsServer(ToolServer):
             self._refunds.append(refund)
             return ToolResult(ok=True, tool=tool, data={"issued": refund})
         return ToolResult(ok=False, tool=tool, error="no such tool")
+
+
+# A safe, arithmetic-only expression evaluator. It backs the range's "code interpreter"
+# tool so the shipped range can model an RCE surface WITHOUT ever executing attacker code:
+# only numeric literals and the basic operators are allowed — no names, calls, attributes,
+# imports, or builtins.
+_SAFE_BINOPS: dict[type[ast.operator], Callable[[float, float], float]] = {
+    ast.Add: operator.add,
+    ast.Sub: operator.sub,
+    ast.Mult: operator.mul,
+    ast.Div: operator.truediv,
+    ast.FloorDiv: operator.floordiv,
+    ast.Mod: operator.mod,
+    ast.Pow: operator.pow,
+}
+_SAFE_UNARY: dict[type[ast.unaryop], Callable[[float], float]] = {
+    ast.UAdd: operator.pos,
+    ast.USub: operator.neg,
+}
+
+
+def _safe_arith(node: ast.AST) -> float:
+    """Evaluate a pure-arithmetic AST node; raise ValueError on anything else."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+        return float(node.value)
+    if isinstance(node, ast.BinOp) and type(node.op) in _SAFE_BINOPS:
+        return _SAFE_BINOPS[type(node.op)](_safe_arith(node.left), _safe_arith(node.right))
+    if isinstance(node, ast.UnaryOp) and type(node.op) in _SAFE_UNARY:
+        return _SAFE_UNARY[type(node.op)](_safe_arith(node.operand))
+    raise ValueError("unsupported expression")
+
+
+class CommandServer(ToolServer):
+    """A dev 'code interpreter' tool — the range's deliberately-vulnerable RCE surface.
+
+    In the range's fiction this runs arbitrary Python with no authorization. The
+    implementation is a SAFE arithmetic-only evaluator (no subprocess, os, builtins, or
+    names), so the shipped range can never actually execute attacker code — but it
+    faithfully models an interpreter tool: it returns the computed output of the
+    expression it is handed, which is exactly what a capability probe (CUT-DISC-004 /
+    ``frisk``) confirms.
+    """
+
+    id = "code-exec"
+
+    def list_tools(self) -> list[ToolSpec]:
+        return [
+            ToolSpec(
+                server=self.id,
+                name="run_python",
+                description="Execute a Python snippet and return its stdout.",
+                params={"code": "str"},
+                sensitive=True,
+            ),
+        ]
+
+    async def call(self, tool: str, args: dict[str, Any], *, credential: str | None) -> ToolResult:
+        if tool != "run_python":
+            return ToolResult(ok=False, tool=tool, error="no such tool")
+        code = str(args.get("code", "")).strip()
+        expr = code
+        # Support the common interpreter-probe form print(<expr>).
+        match = re.fullmatch(r"print\((.*)\)", code, re.DOTALL)
+        if match:
+            expr = match.group(1).strip()
+        try:
+            value: float = _safe_arith(ast.parse(expr, mode="eval").body)
+        except (ValueError, SyntaxError, TypeError, ZeroDivisionError):
+            return ToolResult(ok=False, tool=tool, error="interpreter error")
+        if isinstance(value, float) and value.is_integer():
+            value = int(value)  # 7006652.0 -> 7006652 so integer products match cleanly
+        return ToolResult(ok=True, tool=tool, data=str(value))

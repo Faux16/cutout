@@ -341,10 +341,11 @@ techniques:
     targets: [tool, mcp]
     desc: >-
       Frisk a target's tools for the resources they can reach — local files (SQL file
-      functions like read_text/read_blob, or a path parameter) and internal network
-      (SSRF via outbound-fetch tools) — and safely confirm each with benign probes
-      (a non-existent path; loopback / TEST-NET URLs). Reachable => candidate; refused
-      => defended.
+      functions like read_text/read_blob, or a path parameter), internal network (SSRF
+      via outbound-fetch tools), and command/code execution (interpreter/shell tools) —
+      and safely confirm each with benign probes (a non-existent path; loopback / TEST-NET
+      URLs; a computation whose result is not in the payload). Reachable => candidate;
+      refused => defended.
     status: implemented
 
   # ---- LAT ----

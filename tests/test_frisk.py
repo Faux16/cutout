@@ -9,6 +9,7 @@ from cutout.engine import Engine, Session, TargetDescriptor
 from cutout.recon.capability_probe import (
     FilesystemDiscovery,
     _classify,
+    _exec_verdict,
     _sql_verdict,
     _ssrf_verdict,
 )
@@ -100,6 +101,31 @@ async def test_frisk_confirms_ssrf_on_range() -> None:
     # external-fetch.http_get performs no URL validation -> SSRF confirmed.
     assert any(f["tool"] == "external-fetch.http_get" for f in ssrf)
     assert ssrf[0]["severity"] == "high"  # loopback reachable in the range mock
+
+
+def test_exec_verdict_confirms_only_on_computed_result() -> None:
+    # The product (marker) is not in the payload, so its presence proves execution.
+    assert _exec_verdict({"ok": True, "data": "3895416"}, "3895416") == "reachable"
+    # A per-payload failure (wrong language) is inconclusive — the other payload confirms.
+    assert _exec_verdict({"ok": False, "error": "print: command not found"}, "3895416") == (
+        "inconclusive"
+    )
+    # An explicit guard reads as defended.
+    assert _exec_verdict({"ok": False, "error": "command execution is disabled"}, "3895416") == (
+        "defended"
+    )
+
+
+async def test_frisk_confirms_command_exec_on_range() -> None:
+    session = _session()
+    engine = Engine(session=session)
+    await engine.run("CUT-DISC-004")
+
+    findings = session.artifacts["resource_findings"]
+    ex = [f for f in findings if "execution" in f["capability"]]
+    # code-exec.run_python evaluates the expression and returns the result -> confirmed.
+    assert any(f["tool"] == "code-exec.run_python" for f in ex)
+    assert ex[0]["severity"] == "critical"
 
 
 async def test_frisk_skips_when_no_candidates() -> None:
