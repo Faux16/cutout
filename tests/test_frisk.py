@@ -6,7 +6,12 @@ from uuid import uuid4
 
 import pytest
 from cutout.engine import Engine, Session, TargetDescriptor
-from cutout.recon.capability_probe import FilesystemDiscovery, _classify, _sql_verdict
+from cutout.recon.capability_probe import (
+    FilesystemDiscovery,
+    _classify,
+    _sql_verdict,
+    _ssrf_verdict,
+)
 from cutout_range import reset_ranges
 
 
@@ -58,20 +63,43 @@ async def test_frisk_check_flags_filesystem_candidates() -> None:
     assert "fs-tools.read_file" in result.data["candidates"]
 
 
+def test_ssrf_verdict_distinguishes_reach_and_block() -> None:
+    # Returned a response for an internal/reserved target -> reachable.
+    assert _ssrf_verdict({"ok": True, "data": {"status": 200}}) == "reachable"
+    # Attempted the connection and failed at the socket -> still reachable (it tried).
+    assert _ssrf_verdict({"ok": False, "error": "Connection refused"}) == "reachable"
+    # An SSRF guard refused the destination -> defended.
+    assert _ssrf_verdict({"ok": False, "error": "requests to private addresses are blocked"}) == (
+        "defended"
+    )
+    assert _ssrf_verdict({"ok": False, "error": "weird"}) == "inconclusive"
+
+
 async def test_frisk_confirms_path_file_read_on_range() -> None:
     session = _session()
     engine = Engine(session=session)
     result = await engine.run("CUT-DISC-004")
     assert result.status == "success"
 
-    findings = session.artifacts["filesystem_findings"]
+    findings = session.artifacts["resource_findings"]
     tools = {f["tool"] for f in findings}
     # read_file opened our made-up path -> confirmed reachable (file-read candidate).
     assert "fs-tools.read_file" in tools
     # search_customers has a `query` param (a signal) but is not a real SQL engine,
     # so the probe must NOT confirm it — signal candidates get cleared by the probe.
     assert "customer-data.search_customers" not in tools
-    assert all(f["severity"] == "high" for f in findings)
+
+
+async def test_frisk_confirms_ssrf_on_range() -> None:
+    session = _session()
+    engine = Engine(session=session)
+    await engine.run("CUT-DISC-004")
+
+    findings = session.artifacts["resource_findings"]
+    ssrf = [f for f in findings if "request forgery" in f["capability"]]
+    # external-fetch.http_get performs no URL validation -> SSRF confirmed.
+    assert any(f["tool"] == "external-fetch.http_get" for f in ssrf)
+    assert ssrf[0]["severity"] == "high"  # loopback reachable in the range mock
 
 
 async def test_frisk_skips_when_no_candidates() -> None:
