@@ -155,6 +155,18 @@ HTTP connection. This is
 recon only; the attack modules need a full range/agent target. **Only run this against MCP
 servers you own or are explicitly authorized to test.**
 
+**`cutout hunt` — the one-command OSS-hunt workflow.** Recon + `frisk` a real MCP server and
+draft a finding for each confirmed capability (local file read, SSRF, command exec), in one go:
+
+```bash
+cutout hunt "mcp+stdio:some-mcp-server --db /path/db"   # stdio server
+cutout hunt mcp://host:port/mcp                          # HTTP server
+```
+
+It prints a summary, a confirmed-capabilities table, and a finding draft per capability with
+reminders to confirm end-to-end, check prior art, and disclose responsibly. Probes are benign
+(they read no real files and hit only loopback/reserved hosts). **Authorized targets only.**
+
 With the networked range, planted state (RAG docs, shared memory) persists **server-side**
 between separate commands, so a chain composes across processes. Reset it with
 `docker compose restart`; tear it down with `docker compose down`.

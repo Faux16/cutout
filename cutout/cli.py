@@ -4,6 +4,7 @@ Commands:
     list                     list all registered modules
     info <id>                show one module's metadata and options
     run <id> [--opt k=v]...   run a module and write a JSONL transcript
+    hunt <mcp-target>        recon + frisk a real MCP server and draft findings
     replay <transcript>      re-render a past run's evidence events
     catalog [path]           show catalog coverage (implemented vs planned)
 """
@@ -193,6 +194,101 @@ async def _run_module(
     async with EvidenceWriter(transcript) as writer:
         engine = Engine(session=session, writer=writer)
         return await engine.run(module_id, options)
+
+
+@app.command("hunt")
+def hunt(
+    target: str = typer.Argument(
+        ...,
+        help="MCP target to hunt: 'mcp+stdio:<command>' (stdio server) or "
+        "mcp://host:port/mcp (HTTP). Only test servers you are authorized to.",
+    ),
+    out: Path | None = typer.Option(
+        None, "--out", help="Transcript path (default: runs/hunt-<ts>.jsonl)."
+    ),
+) -> None:
+    """Recon + frisk a real MCP server and draft findings (the OSS-hunt workflow).
+
+    Enumerates the server's tools, safely probes them for reachable resources (local file
+    read, SSRF, command exec), and drafts a finding for each confirmed capability. Probes
+    are benign; you still confirm exploitability, check prior art, and disclose responsibly.
+    """
+    transcript = out or _default_transcript("hunt")
+    try:
+        session = asyncio.run(_hunt(target, transcript))
+    except (CutoutError, OptionError) as exc:
+        err_console.print(f"[red]error:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+    except Exception as exc:
+        err_console.print(f"[red]error:[/red] {type(exc).__name__}: {exc}")
+        err_console.print(f"[dim]could not reach or drive target {target}; is it up?[/dim]")
+        raise typer.Exit(code=1) from exc
+
+    _render_hunt(target, session, transcript)
+
+
+async def _hunt(target: str, transcript: Path) -> Session:
+    session = Session(target=TargetDescriptor(uri=target))
+    async with EvidenceWriter(transcript) as writer:
+        engine = Engine(session=session, writer=writer)
+        await engine.run("CUT-RECON-001")  # casing — enumerate tools/hosts
+        await engine.run("CUT-DISC-004")  # frisk — probe reachable resources
+    return session
+
+
+def _render_hunt(target: str, session: Session, transcript: Path) -> None:
+    hosts = session.artifacts.get("hosts", [])
+    tools = session.artifacts.get("tools", [])
+    findings = session.artifacts.get("resource_findings", [])
+
+    server = hosts[0]["endpoint"] if hosts else target
+    sensitive = sum(1 for t in tools if t.get("sensitive"))
+    console.print(
+        Panel(
+            f"target : [cyan]{target}[/cyan]\n"
+            f"server : {server}\n"
+            f"tools  : {len(tools)} ({sensitive} sensitive)\n"
+            f"findings: [{'red' if findings else 'green'}]{len(findings)}[/]",
+            title="hunt summary",
+            expand=False,
+        )
+    )
+
+    if not findings:
+        console.print(
+            "[green]no reachable-resource findings — target defended these probes.[/green]"
+        )
+        console.print(f"[dim]transcript written to[/dim] {transcript}")
+        return
+
+    table = Table(title="Confirmed capabilities (verify before reporting)")
+    table.add_column("Tool", style="bold cyan")
+    table.add_column("Capability")
+    table.add_column("Severity")
+    table.add_column("Vector", style="green")
+    for f in findings:
+        sev = f["severity"]
+        color = {"critical": "red", "high": "red", "medium": "yellow"}.get(sev, "white")
+        table.add_row(f["tool"], f["capability"], f"[{color}]{sev}[/{color}]", f["vector"])
+    console.print(table)
+
+    for f in findings:
+        sev = f["severity"]
+        color = {"critical": "red", "high": "red", "medium": "yellow"}.get(sev, "white")
+        console.print(
+            Panel(
+                f"[bold]{f['tool']} — {f['capability']}[/bold] ([{color}]{sev}[/{color}])\n"
+                f"• Vector: {f['vector']}\n"
+                f"• Detail: {f['detail']}\n"
+                "• Confirm: reproduce end-to-end against a value you control (a marker file / "
+                "your own endpoint), not real data.\n"
+                "• Prior art: search advisories/CVEs/issues for this package before reporting.\n"
+                "• Disclose: coordinated disclosure only; see ETHICS.md.",
+                title="finding draft",
+                expand=False,
+            )
+        )
+    console.print(f"[dim]transcript written to[/dim] {transcript}")
 
 
 @app.command("replay")
