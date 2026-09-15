@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import cmd
+import random
 import shlex
 from datetime import UTC, datetime
 from pathlib import Path
@@ -45,11 +46,38 @@ from cutout.engine import (
 )
 from cutout.engine.errors import CutoutError
 
-BANNER = r"""            _              _
+# Random wordmark on each launch (msfconsole-style). All variants are pure ASCII.
+_BANNERS = (
+    r"""            _              _
   ___ _   _| |_ ___  _   _| |_
  / __| | | | __/ _ \| | | | __|
 | (__| |_| | || (_) | |_| | |_
- \___|\__,_|\__\___/ \__,_|\__|"""
+ \___|\__,_|\__\___/ \__,_|\__|""",
+    r"""              __              __
+  _______  __/ /_____  __  __/ /_
+ / ___/ / / / __/ __ \/ / / / __/
+/ /__/ /_/ / /_/ /_/ / /_/ / /_
+\___/\__,_/\__/\____/\__,_/\__/""",
+    r"""         _            _
+ __ _  _| |_ ___ _  _| |_
+/ _| || |  _/ _ \ || |  _|
+\__|\_,_|\__\___/\_,_|\__|""",
+    r""".----.--.--.|  |_.-----.--.--.|  |_
+|  __|  |  ||   _|  _  |  |  ||   _|
+|____|_____||____|_____|_____||____|""",
+)
+
+# Rotating tagline — a different mood each launch.
+_TAGLINES = (
+    "the relay nobody checks",
+    "every tool is a door",
+    "your agents trust too much",
+    "injection is the easy part",
+    "recon the swarm, own the chain",
+    "the confused deputy will see you now",
+    "post-exploitation for the agent age",
+    "map it · move through it · leave a trace",
+)
 
 
 class _Transcript:
@@ -191,9 +219,11 @@ class CutoutConsole(cmd.Cmd):
         count = len(get_registry())
         target = self.session.target.uri or "in-process range (offline)"
 
-        art = "\n".join(f"[bold red]{line}[/bold red]" for line in BANNER.splitlines())
+        art = "\n".join(
+            f"[bold red]{line}[/bold red]" for line in random.choice(_BANNERS).splitlines()
+        )
         self.console.print("\n" + art)
-        self.console.print("  [dim italic]the relay nobody checks[/dim italic]\n")
+        self.console.print(f"  [dim italic]{random.choice(_TAGLINES)}[/dim italic]\n")
         body = (
             "[yellow]⚠ authorized testing only[/yellow] [dim]— bundled range or systems you have "
             "written permission to test (see ETHICS.md)[/dim]\n"
