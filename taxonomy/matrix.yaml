@@ -173,11 +173,15 @@ techniques:
     status: implemented
   - id: CUT-PERS-002
     name: Conversation-Memory Implant
+    alias: revenant
     tactic: PERS
     layer: persistence
     targets: [memory]
-    desc: Write a persistent instruction into the agent's long-term memory.
-    status: planned
+    desc: >-
+      Plant one directive in the agent's long-term memory; it is re-read and re-obeyed on
+      every processing cycle, executing again and again from a single write (unlike the
+      one-shot shared-memory pivot).
+    status: implemented
   - id: CUT-PERS-003
     name: Poisoned Instruction File
     alias: handler
