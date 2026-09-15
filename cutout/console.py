@@ -28,6 +28,7 @@ from urllib.parse import urlsplit
 from uuid import uuid4
 
 from rich.console import Console
+from rich.markup import escape
 from rich.panel import Panel
 from rich.table import Table
 
@@ -129,6 +130,78 @@ class CutoutConsole(cmd.Cmd):
 
     def _err(self, msg: str) -> None:
         self.console.print(f"[red]error:[/red] {msg}")
+
+    # ---- rendering helpers -------------------------------------------------
+    @staticmethod
+    def _fmt_value(value: object, width: int = 64) -> str:
+        """A compact, single-line, markup-safe rendering of an evidence value."""
+        if isinstance(value, str):
+            text = value
+        elif isinstance(value, list | tuple):
+            text = ", ".join(str(v) for v in value)
+        elif isinstance(value, dict):
+            text = ", ".join(f"{k}={v}" for k, v in value.items())
+        else:
+            text = str(value)
+        text = " ".join(text.split())  # collapse newlines/runs of whitespace
+        if len(text) > width:
+            text = text[: width - 1] + "…"
+        return escape(text)
+
+    def _render_event(self, event: EvidenceEvent) -> None:
+        """One compact, readable line per evidence event (replaces the raw dict dump)."""
+        color = {"check": "yellow", "run": "cyan"}.get(event.phase.value, "white")
+        parts = "  ".join(
+            f"[dim]{escape(str(k))}=[/dim]{self._fmt_value(v)}" for k, v in event.data.items()
+        )
+        line = f"  [{color}]›[/{color}] [bold]{escape(event.action)}[/bold]"  # noqa: RUF001
+        if parts:
+            line += f"  {parts}"
+        self.console.print(line)
+
+    def _run_hint(self, result: object) -> None:
+        """Suggest the natural next step, or the missing prerequisite on failure."""
+        mid = self.current or ""
+        status = getattr(result, "status", "")
+        if status == "success":
+            hint = {
+                "CUT-RECON-001": "'frisk' to probe reachable resources, or 'use deaddrop'",
+                "CUT-DISC-004": "see 'findings'; 'use puppet' to exploit a confirmed capability",
+                "CUT-INJ-002": "'use puppet; run' — a benign query retrieves the payload",
+                "CUT-EXEC-001": "check 'loot', then 'use siphon; run', or 'use sleeper' to persist",
+                "CUT-PERS-001": "implant re-triggers on any future query; 'use courier' to pivot",
+                "CUT-LAT-001": "'use siphon; run' to exfil what you harvested",
+                "CUT-LAT-002": "'use siphon; run' to exfil what you harvested",
+                "CUT-EXFIL-001": "'replay' to re-narrate the whole chain, or 'save <path>'",
+            }.get(mid)
+        elif status == "failed":
+            hint = {
+                "CUT-EXEC-001": "no payload retrieved — plant one first: 'use deaddrop; run'",
+                "CUT-EXFIL-001": "nothing to exfil — harvest first (deaddrop → puppet)",
+                "CUT-LAT-001": "pivot needs loot — run the inject → exec chain first",
+            }.get(mid)
+        else:
+            hint = None
+        if hint:
+            self.console.print(f"[dim]→ {hint}[/dim]")
+
+    def _print_banner(self) -> None:
+        """Banner plus a live status/quick-start line."""
+        self.console.print(BANNER)
+        try:
+            from importlib.metadata import version as _pkg_version
+
+            ver = _pkg_version("cutout")
+        except Exception:
+            ver = "0.1.0"
+        count = len(get_registry())
+        target = self.session.target.uri or "in-process range (offline)"
+        self.console.print(
+            f" [dim]v{ver} · {count} modules · target[/dim] [cyan]{escape(target)}[/cyan]\n"
+            " [dim]quick start:[/dim] [bold]scan[/bold] → [bold]frisk[/bold] → "
+            "[bold]use[/bold] <alias> → [bold]run[/bold]   "
+            "[dim]·  'help' for commands  ·  'status' for session state[/dim]\n"
+        )
 
     # ---- discovery ---------------------------------------------------------
     def do_list(self, arg: str) -> None:
@@ -520,14 +593,14 @@ class CutoutConsole(cmd.Cmd):
         except (CutoutError, OptionError) as exc:
             self._err(str(exc))
             return
+        for event in self.transcript.events[before:]:
+            self._render_event(event)
         color = {"success": "green", "failed": "red", "skipped": "yellow"}.get(
             result.status, "white"
         )
-        for event in self.transcript.events[before:]:
-            self.console.print(
-                f"  [dim]{event.phase.value}[/dim] [bold]{event.action}[/bold] {event.data}"
-            )
-        self.console.print(f"[{color}]{result.status}[/{color}] — {result.summary}")
+        glyph = {"success": "✓", "failed": "✗", "skipped": "•"}.get(result.status, "•")
+        self.console.print(f"[{color}]{glyph} {result.status}[/{color}] — {result.summary}")
+        self._run_hint(result)
 
     def do_exploit(self, arg: str) -> None:
         """exploit — alias for run."""
@@ -558,10 +631,15 @@ class CutoutConsole(cmd.Cmd):
                 table.add_row(k, v)
             self.console.print(table)
         else:
-            self.console.print("[dim]no secrets harvested yet[/dim]")
-        artifacts = sorted(self.session.artifacts)
-        if artifacts:
-            self.console.print(f"[dim]artifacts:[/dim] {', '.join(artifacts)}")
+            self.console.print(
+                "[dim]no secrets harvested yet — run an inject → exec chain "
+                "(deaddrop → puppet)[/dim]"
+            )
+        findings = self.session.artifacts.get("resource_findings")
+        if findings:
+            self.console.print(
+                f"[dim]· {len(findings)} resource finding(s) from frisk — see 'findings'[/dim]"
+            )
 
     def do_graph(self, arg: str) -> None:
         """graph — show the discovered topology (nodes/edges)."""
@@ -592,9 +670,59 @@ class CutoutConsole(cmd.Cmd):
         path.write_text(self.session.model_dump_json(indent=2), encoding="utf-8")
         self.console.print(f"[dim]session saved to[/dim] {path}")
 
+    _HELP_GROUPS = (
+        ("Recon", ("scan", "hosts", "services", "frisk", "findings")),
+        ("Modules", ("list", "search", "use", "info", "show", "set", "unset", "back")),
+        ("Attack", ("check", "run", "exploit", "call")),
+        ("Session", ("loot", "sessions", "graph", "replay", "save", "status")),
+        ("Meta", ("banner", "help", "exit")),
+    )
+
+    def do_help(self, arg: str) -> None:
+        """help [command] — commands by category, or one command's detail."""
+        if arg.strip():
+            super().do_help(arg.strip())
+            return
+        for title, cmds in self._HELP_GROUPS:
+            table = Table(
+                title=f"[bold]{title}[/bold]",
+                title_justify="left",
+                show_header=False,
+                box=None,
+                pad_edge=False,
+            )
+            table.add_column("cmd", style="bold cyan", no_wrap=True)
+            table.add_column("desc", style="white")
+            for name in cmds:
+                doc = (getattr(self, f"do_{name}").__doc__ or "").strip().splitlines()[0]
+                desc = doc.split("—", 1)[1].strip() if "—" in doc else doc
+                table.add_row(name, desc)
+            self.console.print(table)
+        self.console.print(
+            "[dim]tip: 'help <command>' for detail · workflow is scan → frisk → use → run[/dim]"
+        )
+
+    def do_status(self, arg: str) -> None:
+        """status — show the current target, selected module, and session totals."""
+        target = self.session.target.uri or "in-process range (offline)"
+        module = "-"
+        if self.current:
+            spec = ModuleSpec.from_module(get_module(self.current))
+            module = f"{spec.alias or spec.id} ({self.current})"
+        findings = self.session.artifacts.get("resource_findings", [])
+        body = (
+            f"[bold]target  [/bold] [cyan]{escape(target)}[/cyan]\n"
+            f"[bold]module  [/bold] {escape(module)}\n"
+            f"[bold]loot    [/bold] {len(self.session.secrets)} secret(s)\n"
+            f"[bold]findings[/bold] {len(findings)}\n"
+            f"[bold]chain   [/bold] {len(self.session.results)} module run(s)\n"
+            f"[bold]evidence[/bold] {len(self.transcript.events)} event(s)"
+        )
+        self.console.print(Panel(body, title="session status", expand=False))
+
     def do_banner(self, arg: str) -> None:
-        """banner — print the banner."""
-        self.console.print(BANNER)
+        """banner — print the banner and quick-start."""
+        self._print_banner()
 
     # ---- exit --------------------------------------------------------------
     def do_exit(self, arg: str) -> bool:
@@ -614,7 +742,7 @@ class CutoutConsole(cmd.Cmd):
 
 def run_console() -> None:
     console = CutoutConsole()
-    console.console.print(BANNER)
+    console._print_banner()
     try:
         console.cmdloop()
     except KeyboardInterrupt:

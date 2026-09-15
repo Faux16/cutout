@@ -17,6 +17,27 @@ def _console(tmp_path: Path) -> CutoutConsole:
     return CutoutConsole(session_transcript=tmp_path / "console.jsonl")
 
 
+def test_fmt_value_is_compact_and_markup_safe() -> None:
+    # Long, multi-line values are collapsed + truncated, and Rich markup is escaped
+    # so a value containing brackets can't corrupt the rendered line.
+    out = CutoutConsole._fmt_value("a\nb   c [bold]x[/bold] " + "z" * 200, width=40)
+    assert "\n" not in out and len(out) <= 40 + 10  # collapsed + truncated (+ escape overhead)
+    assert out.endswith("…")
+    assert CutoutConsole._fmt_value("[red]hi[/red]") == r"\[red]hi\[/red]"
+
+
+def test_help_status_and_banner_render(tmp_path: Path) -> None:
+    con = _console(tmp_path)
+    # None of the new UX commands should raise.
+    con.onecmd("help")
+    con.onecmd("help scan")
+    con.onecmd("status")
+    con.onecmd("banner")
+    con.onecmd("use puppet")
+    con.onecmd("status")  # with a module selected
+    assert con.current == "CUT-EXEC-001"
+
+
 def test_use_sets_current_and_prompt(tmp_path: Path) -> None:
     con = _console(tmp_path)
     con.onecmd("use CUT-RECON-001")
