@@ -41,6 +41,10 @@ techniques:
     name: Shared-Memory Pivot
     tactic: LAT
     targets: [memory, rag]
+  - id: CUT-DISC-004
+    name: Resource / Filesystem Discovery
+    tactic: DISC
+    targets: [tool, mcp]
   # Next up (planned — no module yet):
   - id: CUT-DISC-001
     name: Post-Access Tool Discovery

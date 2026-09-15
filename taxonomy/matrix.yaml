@@ -335,11 +335,15 @@ techniques:
     status: planned
   - id: CUT-DISC-004
     name: Resource / Filesystem Discovery
+    alias: frisk
     tactic: DISC
     layer: recon
-    targets: [tool]
-    desc: Enumerate files/resources reachable via tools.
-    status: planned
+    targets: [tool, mcp]
+    desc: >-
+      Frisk a target's tools for filesystem reach and safely confirm it with a benign
+      non-existent probe path (SQL file functions like read_text/read_blob, or a path
+      parameter). File-not-found => reachable (file-read candidate); refused => defended.
+    status: implemented
 
   # ---- LAT ----
   - id: CUT-LAT-001
