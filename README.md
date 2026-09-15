@@ -17,6 +17,9 @@ these weaknesses before attackers do.
 > systems you have explicit written permission to test. Every technique is paired with
 > detection/mitigation guidance. See [ETHICS.md](ETHICS.md).
 
+📊 **[Browse the CTX taxonomy →](https://faux16.github.io/cutout/)** — the ATT&CK-style
+technique matrix for agentic systems.
+
 ## The thesis
 
 Every existing tool tests **a prompt against a model**. Nobody treats a *deployed
@@ -108,7 +111,8 @@ cutout catalog                                # technique coverage (implemented 
 
 Every module implements exactly one technique ID from
 [`taxonomy/matrix.yaml`](taxonomy/matrix.yaml) — an ATT&CK-for-agents where each cell maps
-to runnable code.
+to runnable code. Browse the full matrix (implemented vs planned across every tactic) as a
+page: **[CTX taxonomy →](https://faux16.github.io/cutout/)**.
 
 Each module also has a memorable **tradecraft alias** — in the console you `use puppet`,
 not `use CUT-EXEC-001` (the ID stays canonical; the alias is the ergonomic handle).
