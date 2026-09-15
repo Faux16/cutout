@@ -45,16 +45,11 @@ from cutout.engine import (
 )
 from cutout.engine.errors import CutoutError
 
-BANNER = r"""
-   ___      _               _
+BANNER = r"""   ___      _               _
   / __\   _| |_ ___  _   _ | |_
  / / | | | | __/ _ \| | | || __|
 / /__| |_| | || (_) | |_| || |_
-\____/\__,_|\__\___/ \__,_| \__|   the relay nobody checks
-
- Cutout — offensive framework for agentic systems.  Authorized testing only (see ETHICS.md).
- Type 'help' for commands, 'use <ID>' to select a module, 'exit' to quit.
-"""
+\____/\__,_|\__\___/ \__,_| \__|"""
 
 
 class _Transcript:
@@ -186,8 +181,7 @@ class CutoutConsole(cmd.Cmd):
             self.console.print(f"[dim]→ {hint}[/dim]")
 
     def _print_banner(self) -> None:
-        """Banner plus a live status/quick-start line."""
-        self.console.print(BANNER)
+        """A styled welcome: colour wordmark, tagline, and a compact info panel."""
         try:
             from importlib.metadata import version as _pkg_version
 
@@ -196,12 +190,28 @@ class CutoutConsole(cmd.Cmd):
             ver = "0.1.0"
         count = len(get_registry())
         target = self.session.target.uri or "in-process range (offline)"
-        self.console.print(
-            f" [dim]v{ver} · {count} modules · target[/dim] [cyan]{escape(target)}[/cyan]\n"
-            " [dim]quick start:[/dim] [bold]scan[/bold] → [bold]frisk[/bold] → "
-            "[bold]use[/bold] <alias> → [bold]run[/bold]   "
-            "[dim]·  'help' for commands  ·  'status' for session state[/dim]\n"
+
+        art = "\n".join(f"[bold red]{line}[/bold red]" for line in BANNER.splitlines())
+        self.console.print("\n" + art)
+        self.console.print("  [dim italic]the relay nobody checks[/dim italic]\n")
+        body = (
+            "[yellow]⚠ authorized testing only[/yellow] [dim]— bundled range or systems you have "
+            "written permission to test (see ETHICS.md)[/dim]\n"
+            f"[dim]v{ver} · {count} modules · target:[/dim] [cyan]{escape(target)}[/cyan]\n\n"
+            "[dim]start[/dim]  [bold]scan[/bold] → [bold]frisk[/bold] → [bold]use[/bold] "
+            "<alias> → [bold]run[/bold]     [dim]help · status · exit[/dim]"
         )
+        self.console.print(
+            Panel(
+                body,
+                title="[bold]Cutout[/bold] · offensive framework for agentic systems",
+                title_align="left",
+                border_style="red",
+                expand=False,
+                padding=(0, 1),
+            )
+        )
+        self.console.print()
 
     # ---- discovery ---------------------------------------------------------
     def do_list(self, arg: str) -> None:
