@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from .agent import A2AResult, InfectionEvent, Orchestrator, PeerAgent, WormReport
+from .chat_target import MockChatAgent
 from .corpus import Document, RagCorpus
 from .guardrail import Guardrail, default_guardrail
 from .hosts import HostInfo
@@ -30,6 +31,7 @@ from .tool_servers import (
 )
 
 if TYPE_CHECKING:
+    from .chat_target import ChatTarget
     from .mcp_target import McpTarget
     from .remote import RemoteRange
 
@@ -127,6 +129,10 @@ class Range:
         self.agents: dict[str, PeerAgent] = {
             a.id: a for a in (billing, support, analytics, it_admin)
         }
+
+        # A black-box chat assistant (no tools/RAG) — the offline target for direct
+        # prompt-injection (CUT-INJ-001), the same interface a real ChatTarget exposes.
+        self.chat_agent = MockChatAgent()
 
     def list_tools(self) -> list[ToolSpec]:
         specs: list[ToolSpec] = []
@@ -328,13 +334,16 @@ def reset_ranges() -> None:
     _RANGES.clear()
 
 
-def connect_range(target: object) -> Range | RemoteRange | McpTarget:
+def connect_range(target: object) -> Range | RemoteRange | McpTarget | ChatTarget:
     """Resolve a live range from a session target descriptor.
 
     Dispatch on ``target.uri``:
 
     * ``mcp://…`` / ``mcp+http(s)://…`` -> a :class:`~cutout_range.mcp_target.McpTarget`,
       a recon adapter for an arbitrary real MCP server (not the range);
+    * ``chat+http(s)://…`` -> a :class:`~cutout_range.chat_target.ChatTarget`, a driver for a
+      real remote chat agent (the CUT-INJ-001 target); request/response shaping comes from
+      ``target.metadata`` (``message_field``, ``reply_field``, ``method``, ``headers``, ``body``);
     * an ``http(s)://`` URI  -> a :class:`~cutout_range.remote.RemoteRange` attacking the
       running networked stack at that orchestrator URL;
     * any other value        -> an in-process :class:`Range` (the URI, if given, is a state
@@ -354,6 +363,17 @@ def connect_range(target: object) -> Range | RemoteRange | McpTarget:
 
             real = u[len("mcp+") :] if u.startswith("mcp+") else "http://" + u[len("mcp://") :]
             return McpTarget(real)
+        if u.startswith(("chat+http://", "chat+https://")):
+            from .chat_target import ChatTarget
+
+            return ChatTarget(
+                u[len("chat+") :],
+                message_field=str(metadata.get("message_field", "message")),
+                reply_field=metadata.get("reply_field"),
+                method=str(metadata.get("method", "POST")),
+                headers=metadata.get("headers") or {},
+                extra_body=metadata.get("body") or {},
+            )
         if u.startswith("http"):
             from .remote import RemoteRange
 

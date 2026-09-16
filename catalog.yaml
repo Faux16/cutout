@@ -16,6 +16,10 @@ techniques:
     name: Tool & Schema Enumeration
     tactic: RECON
     targets: [mcp, tool]
+  - id: CUT-INJ-001
+    name: Direct Prompt Injection
+    tactic: INJ
+    targets: [orchestrator, human]
   - id: CUT-INJ-002
     name: Indirect Injection via RAG/Document
     tactic: INJ
