@@ -414,11 +414,18 @@ techniques:
     status: planned
   - id: CUT-LAT-006
     name: Self-Propagating Agent Worm
+    alias: contagion
     tactic: LAT
     layer: lateral
-    targets: [a2a, rag]
-    desc: Payload that autonomously replicates to each agent it reaches.
-    status: planned
+    targets: [a2a, memory]
+    desc: >-
+      Seed one agent; each agent it reaches obeys the payload, loots its own credential, drops
+      a live self-copy in memory, and forwards the worm to its own peers — an autonomous cascade
+      across the A2A mesh whose targets come from each infected node, not the attacker. A
+      per-agent signature guard terminates the spread over cyclic trust graphs. Mitigation:
+      authenticate/attribute inter-agent messages, rate-limit agent-initiated fan-out, scope
+      per-agent credentials, and quarantine infected nodes.
+    status: implemented
 
   # ---- COLL ----
   - id: CUT-COLL-001
