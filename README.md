@@ -125,6 +125,7 @@ not `use CUT-EXEC-001` (the ID stays canonical; the alias is the ergonomic handl
 | `recce` | `CUT-DISC-001` | Discovery | Post-access tool discovery — peer-agent tools hidden from initial recon |
 | `frisk` | `CUT-DISC-004` | Discovery | Probe tools for reachable resources: file read, SSRF, command exec |
 | `deaddrop` | `CUT-INJ-002` | Initial Injection | Indirect injection via a poisoned RAG document |
+| `mockingbird` | `CUT-INJ-003` | Initial Injection | Tool-output injection — a directive hidden in a fetched page/API response the agent obeys |
 | `puppet` | `CUT-EXEC-001` | Execution | Coerced tool invocation → credential harvest |
 | `breakout` | `CUT-EXEC-004` | Execution | Weaponize a code-interpreter tool: read files, dump env, run commands, harvest creds |
 | `keyring` | `CUT-CRED-003` | Credential Access | Read `.env`/config via the agent's delegated token |
@@ -141,7 +142,7 @@ not `use CUT-EXEC-001` (the ID stays canonical; the alias is the ergonomic handl
 | `smuggler` | `CUT-EVAS-001` | Defense Evasion | Encode a directive (base64 / zero-width / homoglyph) past a raw-text guardrail |
 | `rollcall` | `CUT-INV-001` | (plumbing) | Session inventory reference stub |
 
-**19 modules, every tactic** — `cutout catalog` shows the live implemented/planned split;
+**20 modules, every tactic** — `cutout catalog` shows the live implemented/planned split;
 `cutout hunt <mcp-target>` chains recon → `frisk` → drafted findings against a real server, and
 `cutout hunt --targets <file>` surveys a whole corpus into an aggregated coverage table + report.
 
@@ -222,7 +223,7 @@ systems, coordinated disclosure, and scope, see [ETHICS.md](ETHICS.md).
 
 ## Status & roadmap
 
-Phase 0 complete, Phase 1 underway — engine, console, 19 modules across every tactic, the
+Phase 0 complete, Phase 1 underway — engine, console, 20 modules across every tactic, the
 published CTX taxonomy page, and the offline + networked-MCP range all landed. See
 [ROADMAP.md](ROADMAP.md).
 

@@ -20,7 +20,7 @@ def test_resolve_alias() -> None:
 
 
 def test_resolve_unique_substring() -> None:
-    assert _resolve("inject") == "CUT-INJ-002"
+    assert _resolve("document") == "CUT-INJ-002"
 
 
 def test_resolve_ambiguous_raises() -> None:

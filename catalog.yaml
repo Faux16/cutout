@@ -20,6 +20,10 @@ techniques:
     name: Indirect Injection via RAG/Document
     tactic: INJ
     targets: [rag]
+  - id: CUT-INJ-003
+    name: Indirect Injection via Tool Output
+    tactic: INJ
+    targets: [tool, orchestrator]
   - id: CUT-EXEC-001
     name: Coerced Tool Invocation
     tactic: EXEC

@@ -63,9 +63,9 @@ def test_use_by_index_and_substring(tmp_path: Path) -> None:
     con.onecmd("use 0")
     assert con.current == "CUT-EXEC-001"
     # Name/id substring selection, no ID memorization needed.
-    con.onecmd("use inject")
+    con.onecmd("use document")  # unique to deaddrop's name (Indirect Injection via RAG/Document)
     assert con.current == "CUT-INJ-002"
-    con.onecmd("use lat")  # matches both LAT modules -> ambiguous, selection unchanged
+    con.onecmd("use lat")  # matches several LAT modules -> ambiguous, selection unchanged
     assert con.current == "CUT-INJ-002"
 
 
