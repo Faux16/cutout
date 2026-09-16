@@ -198,6 +198,14 @@ class ExternalFetchServer(ToolServer):
 
     id = "external-fetch"
 
+    def __init__(self) -> None:
+        # Attacker-controlled response bodies keyed by URL. An agent that fetches a poisoned
+        # URL gets attacker text back — the tool-output-injection vector (CUT-INJ-003).
+        self._poison: dict[str, str] = {}
+
+    def poison(self, url: str, body: str) -> None:
+        self._poison[url] = body
+
     def list_tools(self) -> list[ToolSpec]:
         return [
             ToolSpec(
@@ -211,12 +219,10 @@ class ExternalFetchServer(ToolServer):
     async def call(self, tool: str, args: dict[str, Any], *, credential: str | None) -> ToolResult:
         if tool == "http_get":
             url = str(args.get("url", ""))
-            # Offline: record the request but never actually reach the network.
-            return ToolResult(
-                ok=True,
-                tool=tool,
-                data={"url": url, "status": 200, "body": "[offline-mock] request recorded"},
-            )
+            # Offline: record the request but never actually reach the network. If the URL
+            # was poisoned, return the attacker-controlled body verbatim.
+            body = self._poison.get(url, "[offline-mock] request recorded")
+            return ToolResult(ok=True, tool=tool, data={"url": url, "status": 200, "body": body})
         return ToolResult(ok=False, tool=tool, error="no such tool")
 
 

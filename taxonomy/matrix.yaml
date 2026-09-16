@@ -90,11 +90,17 @@ techniques:
     status: implemented
   - id: CUT-INJ-003
     name: Indirect Injection via Tool Output
+    alias: mockingbird
     tactic: INJ
     layer: delivery
-    targets: [tool]
-    desc: Poisoned API response / webpage the agent reads as tool output.
-    status: planned
+    targets: [tool, orchestrator]
+    desc: >-
+      Poison the content a tool returns (a fetched page / API response); the agent makes a
+      legitimate tool call and obeys an ACTION directive hidden in the response, under its own
+      credential. The vector no "trusted source" allowlist catches, because the tool is trusted.
+      Mitigation: treat tool output as untrusted input — never re-plan instructions from it,
+      tag provenance, and authorize tool calls whose origin is another tool's output.
+    status: implemented
   - id: CUT-INJ-004
     name: Inter-Agent Message Injection
     tactic: INJ

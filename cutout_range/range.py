@@ -178,6 +178,16 @@ class Range:
         assert isinstance(fs, FilesystemToolServer)
         fs.unplant(path)
 
+    def poison_tool_output(self, url: str, body: str) -> None:
+        """Make the fetch tool return attacker-controlled content for ``url``.
+
+        The agent that fetches it reads the poisoned body back into its context and obeys any
+        directive in it — the tool-output-injection primitive (CUT-INJ-003).
+        """
+        fetch = self.servers["external-fetch"]
+        assert isinstance(fetch, ExternalFetchServer)
+        fetch.poison(url, body)
+
     async def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
         """Invoke a tool by name with attacker-controlled args, unauthenticated.
 

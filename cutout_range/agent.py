@@ -111,6 +111,17 @@ def _parse_actions(text: str, source: str) -> list[PlannedAction]:
     return actions
 
 
+def _tool_output_text(data: Any) -> str:
+    """The textual view of a tool result the agent reads back (a fetched body, etc.)."""
+    if isinstance(data, dict):
+        for key in ("body", "content", "text", "output", "result"):
+            value = data.get(key)
+            if isinstance(value, str):
+                return value
+        return str(data)
+    return str(data)
+
+
 class Orchestrator:
     """Composes RAG retrieval + naive planning + tool execution."""
 
@@ -160,6 +171,28 @@ class Orchestrator:
             return None
         return normalize(text)
 
+    async def _invoke(self, action: PlannedAction, result: OrchestratorResult) -> None:
+        """Execute one planned tool call, recording it (with its provenance) on the result."""
+        resolved = self._resolve(action.tool)
+        if resolved is None:
+            result.tool_calls.append(
+                {"tool": action.tool, "args": action.args, "ok": False, "error": "unknown tool"}
+            )
+            return
+        server_id, name = resolved
+        # Confused deputy: the agent silently attaches its own delegated token.
+        call = await self._servers[server_id].call(name, dict(action.args), credential=self._token)
+        result.tool_calls.append(
+            {
+                "tool": f"{server_id}.{name}",
+                "args": action.args,
+                "source": action.source,
+                "ok": call.ok,
+                "data": call.data,
+                "error": call.error,
+            }
+        )
+
     async def handle(self, task: str) -> OrchestratorResult:
         retrieved = self._corpus.search(task, k=3)
         result = OrchestratorResult(task=task, answer="", retrieved=[d.id for d in retrieved])
@@ -195,27 +228,29 @@ class Orchestrator:
         result.planned = planned
 
         for action in planned:
-            resolved = self._resolve(action.tool)
-            if resolved is None:
-                result.tool_calls.append(
-                    {"tool": action.tool, "args": action.args, "ok": False, "error": "unknown tool"}
-                )
+            await self._invoke(action, result)
+
+        # THE VULNERABILITY (tool-output injection, CUT-INJ-003): a tool's OUTPUT is fed back
+        # into context with the same authority as any other text, so an ACTION directive
+        # embedded in what a tool RETURNS is obeyed. One bounded follow-up hop — the hop's own
+        # outputs are not re-scanned, so a poisoned tool cannot loop the agent forever.
+        followup: list[PlannedAction] = []
+        for call in list(result.tool_calls):
+            if not call.get("ok"):
                 continue
-            server_id, name = resolved
-            # Confused deputy: the agent silently attaches its own delegated token.
-            call = await self._servers[server_id].call(
-                name, dict(action.args), credential=self._token
-            )
-            result.tool_calls.append(
-                {
-                    "tool": f"{server_id}.{name}",
-                    "args": action.args,
-                    "source": action.source,
-                    "ok": call.ok,
-                    "data": call.data,
-                    "error": call.error,
-                }
-            )
+            source = f"tool-output:{call['tool']}"
+            admitted = self._admit(_tool_output_text(call.get("data")), source, result)
+            if admitted is None:
+                continue
+            acts = _parse_actions(admitted, source)
+            if acts:
+                result.obeyed_injected = True
+                if source not in result.injected_sources:
+                    result.injected_sources.append(source)
+            followup.extend(acts)
+        for action in followup:
+            await self._invoke(action, result)
+        result.planned.extend(followup)
 
         ok_calls = [c for c in result.tool_calls if c["ok"]]
         if ok_calls:
