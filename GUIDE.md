@@ -167,6 +167,20 @@ It prints a summary, a confirmed-capabilities table, and a finding draft per cap
 reminders to confirm end-to-end, check prior art, and disclose responsibly. Probes are benign
 (they read no real files and hit only loopback/reserved hosts). **Authorized targets only.**
 
+**Batch survey — `cutout hunt --targets <file>`.** Hunt a whole corpus in one run and get an
+aggregated coverage table (the study money-shot): per-target file-read / SSRF / RCE reach plus
+overall percentages, with a per-target JSONL transcript for evidence.
+
+```bash
+cutout hunt --targets targets.txt --report survey.json
+```
+
+`targets.txt` is one target per line (`#` comments allowed). Unreachable targets are recorded,
+not fatal, so the survey completes. `--report` writes `survey.json` (per-target records +
+aggregate) and a `survey.md` table alongside. Each ✓ is a **candidate**, not a finding — confirm
+before reporting. **Only survey servers you run yourself in isolation, or are explicitly
+authorized to test (see ETHICS.md).**
+
 With the networked range, planted state (RAG docs, shared memory) persists **server-side**
 between separate commands, so a chain composes across processes. Reset it with
 `docker compose restart`; tear it down with `docker compose down`.

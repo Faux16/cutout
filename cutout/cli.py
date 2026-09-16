@@ -5,6 +5,7 @@ Commands:
     info <id>                show one module's metadata and options
     run <id> [--opt k=v]...   run a module and write a JSONL transcript
     hunt <mcp-target>        recon + frisk a real MCP server and draft findings
+    hunt --targets <file>    batch survey: hunt many servers, print a coverage table
     replay <transcript>      re-render a past run's evidence events
     catalog [path]           show catalog coverage (implemented vs planned)
 """
@@ -14,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -198,33 +200,73 @@ async def _run_module(
 
 @app.command("hunt")
 def hunt(
-    target: str = typer.Argument(
-        ...,
+    target: str | None = typer.Argument(
+        None,
         help="MCP target to hunt: 'mcp+stdio:<command>' (stdio server) or "
         "mcp://host:port/mcp (HTTP). Only test servers you are authorized to.",
     ),
+    targets: Path | None = typer.Option(
+        None,
+        "--targets",
+        help="Batch mode: a file of targets (one per line; '#' comments allowed). "
+        "Runs the hunt against each and prints an aggregated coverage table.",
+    ),
     out: Path | None = typer.Option(
-        None, "--out", help="Transcript path (default: runs/hunt-<ts>.jsonl)."
+        None,
+        "--out",
+        help="Transcript path for single-target mode (default: runs/hunt-<ts>.jsonl).",
+    ),
+    report: Path | None = typer.Option(
+        None,
+        "--report",
+        help="Batch mode: write the aggregated results as JSON (+ a Markdown table alongside).",
     ),
 ) -> None:
-    """Recon + frisk a real MCP server and draft findings (the OSS-hunt workflow).
+    """Recon + frisk real MCP server(s) and draft findings (the OSS-hunt workflow).
 
-    Enumerates the server's tools, safely probes them for reachable resources (local file
+    Enumerates each server's tools, safely probes them for reachable resources (local file
     read, SSRF, command exec), and drafts a finding for each confirmed capability. Probes
     are benign; you still confirm exploitability, check prior art, and disclose responsibly.
-    """
-    transcript = out or _default_transcript("hunt")
-    try:
-        session = asyncio.run(_hunt(target, transcript))
-    except (CutoutError, OptionError) as exc:
-        err_console.print(f"[red]error:[/red] {exc}")
-        raise typer.Exit(code=1) from exc
-    except Exception as exc:
-        err_console.print(f"[red]error:[/red] {type(exc).__name__}: {exc}")
-        err_console.print(f"[dim]could not reach or drive target {target}; is it up?[/dim]")
-        raise typer.Exit(code=1) from exc
 
-    _render_hunt(target, session, transcript)
+    Single target: `cutout hunt mcp+stdio:'<command>'`.
+    Batch survey:  `cutout hunt --targets targets.txt --report survey.json`.
+    """
+    if bool(target) == bool(targets):
+        err_console.print("[red]error:[/red] provide exactly one of <target> or --targets <file>")
+        raise typer.Exit(code=1)
+
+    if target:
+        transcript = out or _default_transcript("hunt")
+        try:
+            session = asyncio.run(_hunt(target, transcript))
+        except (CutoutError, OptionError) as exc:
+            err_console.print(f"[red]error:[/red] {exc}")
+            raise typer.Exit(code=1) from exc
+        except Exception as exc:
+            err_console.print(f"[red]error:[/red] {type(exc).__name__}: {exc}")
+            err_console.print(f"[dim]could not reach or drive target {target}; is it up?[/dim]")
+            raise typer.Exit(code=1) from exc
+        _render_hunt(target, session, transcript)
+        return
+
+    # Batch survey mode.
+    assert targets is not None
+    if not targets.exists():
+        err_console.print(f"[red]error:[/red] targets file not found: {targets}")
+        raise typer.Exit(code=1)
+    entries = [
+        line.strip()
+        for line in targets.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+    if not entries:
+        err_console.print(f"[red]error:[/red] no targets in {targets}")
+        raise typer.Exit(code=1)
+
+    records = _hunt_batch(entries)
+    _render_survey(records)
+    if report:
+        _write_report(records, report)
 
 
 async def _hunt(target: str, transcript: Path) -> Session:
@@ -289,6 +331,173 @@ def _render_hunt(target: str, session: Session, transcript: Path) -> None:
             )
         )
     console.print(f"[dim]transcript written to[/dim] {transcript}")
+
+
+_SEVERITY_RANK = {"critical": 4, "high": 3, "medium": 2, "low": 1, "-": 0}
+
+
+def _finding_classes(findings: list[dict]) -> tuple[bool, bool, bool, str]:
+    """Fold a target's findings into (file_read, ssrf, exec, highest_severity)."""
+    file_read = ssrf = code_exec = False
+    highest = "-"
+    for f in findings:
+        cap = str(f.get("capability", "")).lower()
+        if "file read" in cap:
+            file_read = True
+        elif "request forgery" in cap:
+            ssrf = True
+        elif "execution" in cap:
+            code_exec = True
+        sev = str(f.get("severity", "-")).lower()
+        if _SEVERITY_RANK.get(sev, 0) > _SEVERITY_RANK.get(highest, 0):
+            highest = sev
+    return file_read, ssrf, code_exec, highest
+
+
+def _survey_slug(target: str) -> str:
+    slug = "".join(c if c.isalnum() else "-" for c in target).strip("-")
+    return (slug[:40] or "target").lower()
+
+
+def _survey_record(target: str, session: Session, transcript: Path) -> dict:
+    tools = session.artifacts.get("tools", [])
+    findings = session.artifacts.get("resource_findings", [])
+    file_read, ssrf, code_exec, highest = _finding_classes(findings)
+    hosts = session.artifacts.get("hosts", [])
+    return {
+        "target": target,
+        "reachable": True,
+        "server": hosts[0]["endpoint"] if hosts else target,
+        "tools": len(tools),
+        "sensitive": sum(1 for t in tools if t.get("sensitive")),
+        "file_read": file_read,
+        "ssrf": ssrf,
+        "exec": code_exec,
+        "findings": len(findings),
+        "highest_severity": highest,
+        "capabilities": [f.get("capability") for f in findings],
+        "transcript": str(transcript),
+    }
+
+
+def _hunt_batch(entries: list[str]) -> list[dict]:
+    records: list[dict] = []
+    for i, target in enumerate(entries, 1):
+        console.print(f"[dim]hunting[/dim] [{i}/{len(entries)}] [cyan]{target}[/cyan] …")
+        transcript = _default_transcript(f"hunt-{_survey_slug(target)}")
+        try:
+            session = asyncio.run(_hunt(target, transcript))
+            records.append(_survey_record(target, session, transcript))
+        except Exception as exc:  # a target that won't come up must not sink the survey
+            records.append(
+                {
+                    "target": target,
+                    "reachable": False,
+                    "error": f"{type(exc).__name__}: {exc}",
+                    "transcript": str(transcript),
+                }
+            )
+    return records
+
+
+def _tick(value: bool) -> str:
+    return "[red]✓[/red]" if value else "[dim]-[/dim]"
+
+
+def _render_survey(records: list[dict]) -> None:
+    table = Table(title="OSS-hunt survey — reachable-resource coverage")
+    table.add_column("#", justify="right", style="dim")
+    table.add_column("Target", style="cyan", no_wrap=False)
+    table.add_column("Tools", justify="right")
+    table.add_column("File", justify="center")
+    table.add_column("SSRF", justify="center")
+    table.add_column("RCE", justify="center")
+    table.add_column("Highest", justify="center")
+    for i, r in enumerate(records, 1):
+        if not r.get("reachable"):
+            table.add_row(str(i), r["target"], "[red]unreachable[/red]", "-", "-", "-", "-")
+            continue
+        sev = r["highest_severity"]
+        color = {"critical": "red", "high": "red", "medium": "yellow"}.get(sev, "dim")
+        table.add_row(
+            str(i),
+            r["target"],
+            str(r["tools"]),
+            _tick(r["file_read"]),
+            _tick(r["ssrf"]),
+            _tick(r["exec"]),
+            f"[{color}]{sev}[/{color}]",
+        )
+    console.print(table)
+
+    reachable = [r for r in records if r.get("reachable")]
+    n = len(reachable)
+
+    def _pct(pred: Callable[[dict], bool]) -> str:
+        return f"{(sum(1 for r in reachable if pred(r)) / n * 100):.0f}%" if n else "n/a"
+
+    high_plus = sum(1 for r in reachable if _SEVERITY_RANK.get(r["highest_severity"], 0) >= 3)
+    console.print(
+        Panel(
+            f"targets tested : {len(records)}  ([green]{n}[/green] reachable, "
+            f"{len(records) - n} unreachable)\n"
+            f"file read      : {_pct(lambda r: r['file_read'])}\n"
+            f"SSRF           : {_pct(lambda r: r['ssrf'])}\n"
+            f"code execution : {_pct(lambda r: r['exec'])}\n"
+            f"≥ High severity: {high_plus}/{n}" + (f" ({high_plus / n * 100:.0f}%)" if n else ""),
+            title="survey summary",
+            expand=False,
+        )
+    )
+    console.print(
+        "[yellow]Each ✓ is a candidate, not a finding.[/yellow] Confirm end-to-end against a "
+        "value you control, check prior art, and disclose responsibly (see ETHICS.md)."
+    )
+
+
+def _write_report(records: list[dict], report: Path) -> None:
+    reachable = [r for r in records if r.get("reachable")]
+    n = len(reachable)
+
+    def _count(pred: Callable[[dict], bool]) -> int:
+        return sum(1 for r in reachable if pred(r))
+
+    aggregate = {
+        "targets_tested": len(records),
+        "reachable": n,
+        "unreachable": len(records) - n,
+        "file_read": _count(lambda r: r["file_read"]),
+        "ssrf": _count(lambda r: r["ssrf"]),
+        "exec": _count(lambda r: r["exec"]),
+        "high_or_critical": _count(lambda r: _SEVERITY_RANK.get(r["highest_severity"], 0) >= 3),
+    }
+    report.parent.mkdir(parents=True, exist_ok=True)
+    report.write_text(
+        json.dumps({"aggregate": aggregate, "targets": records}, indent=2), encoding="utf-8"
+    )
+
+    md = [
+        "| # | Target | Tools | FileRead | SSRF | RCE | Highest |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for i, r in enumerate(records, 1):
+        if not r.get("reachable"):
+            md.append(f"| {i} | {r['target']} | unreachable | - | - | - | - |")
+            continue
+        mark = {True: "✅", False: "-"}
+        md.append(
+            f"| {i} | {r['target']} | {r['tools']} | {mark[r['file_read']]} | "
+            f"{mark[r['ssrf']]} | {mark[r['exec']]} | {r['highest_severity']} |"
+        )
+    md.append("")
+    md.append(
+        f"**{n}/{len(records)} reachable** — file read {aggregate['file_read']}, "
+        f"SSRF {aggregate['ssrf']}, RCE {aggregate['exec']}, "
+        f"≥High {aggregate['high_or_critical']}."
+    )
+    md_path = report.with_suffix(".md")
+    md_path.write_text("\n".join(md) + "\n", encoding="utf-8")
+    console.print(f"[dim]report written to[/dim] {report} [dim]and[/dim] {md_path}")
 
 
 @app.command("replay")

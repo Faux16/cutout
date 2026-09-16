@@ -141,8 +141,9 @@ not `use CUT-EXEC-001` (the ID stays canonical; the alias is the ergonomic handl
 | `smuggler` | `CUT-EVAS-001` | Defense Evasion | Encode a directive (base64 / zero-width / homoglyph) past a raw-text guardrail |
 | `rollcall` | `CUT-INV-001` | (plumbing) | Session inventory reference stub |
 
-**19 modules, every tactic** — `cutout catalog` shows the live implemented/planned split, and
-`cutout hunt <mcp-target>` chains recon → `frisk` → drafted findings against a real server.
+**19 modules, every tactic** — `cutout catalog` shows the live implemented/planned split;
+`cutout hunt <mcp-target>` chains recon → `frisk` → drafted findings against a real server, and
+`cutout hunt --targets <file>` surveys a whole corpus into an aggregated coverage table + report.
 
 ## The range
 
