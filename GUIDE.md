@@ -194,6 +194,25 @@ With the networked range, planted state (RAG docs, shared memory) persists **ser
 between separate commands, so a chain composes across processes. Reset it with
 `docker compose restart`; tear it down with `docker compose down`.
 
+**Targeting a real chat agent (`chat+http(s)://`).** Direct prompt injection (`coax`,
+CUT-INJ-001) runs against a black-box chat endpoint, not just the range. Point a target URI at
+it with the `chat+` scheme; request/response shaping comes from the target metadata
+(`message_field`, `reply_field`, `method`, `headers`, `body`), and `CUTOUT_CHAT_TOKEN` is sent
+as a bearer token if set:
+
+```bash
+# offline (the range's deliberately-vulnerable mock chat agent)
+cutout run CUT-INJ-001
+
+# a real, authorized chat endpoint (JSON API): POST {"message": "<payload>"}, read reply
+cutout run CUT-INJ-001 --target 'chat+https://host/v1/chat/<id>'
+```
+
+Chat APIs vary, so `ChatTarget` auto-extracts the reply from common JSON fields
+(`reply`/`response`/`message`/`content`/…) or falls back to the raw body; set `reply_field` in
+the target metadata to pin a specific one. **Only point it at an endpoint you are authorized to
+test** — this makes a real network call (see ETHICS.md).
+
 ---
 
 ## 5. The one-shot CLI (no console)
@@ -244,6 +263,7 @@ whatever the agent sends — if injected content makes the agent ship data here,
 | `casing` | `CUT-RECON-001` | Enumerate tools/schemas and map the topology (this is what `scan` runs). |
 | `recce` | `CUT-DISC-001` | Post-access discovery: enumerate peer-agent tools reachable from a foothold that initial recon can't see (e.g. `payments`). |
 | `frisk` | `CUT-DISC-004` | Probe tools for the resources they reach — local files (SQL `read_text`/`read_blob` or a path param), internal network (SSRF via fetch tools), and command/code execution (interpreter tools) — and safely confirm each with benign probes. |
+| `coax` | `CUT-INJ-001` | Direct prompt injection: drive override/roleplay/system-spoof/encoded payloads at a chat agent, scored by whether it emits an attacker-chosen token, plus a system-prompt/secret extraction probe. Runs offline against the range's mock agent or a real one via a `chat+http(s)://` target. |
 | `deaddrop` | `CUT-INJ-002` | Plant a poisoned document in the RAG corpus (delivery only). |
 | `mockingbird` | `CUT-INJ-003` | Poison the content a tool returns (a fetched page/API response); the agent makes a legit fetch and obeys a directive hidden in the response — tool-output injection. |
 | `puppet` | `CUT-EXEC-001` | A benign query retrieves the payload; the agent obeys it and harvests a secret. |

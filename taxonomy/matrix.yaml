@@ -75,11 +75,19 @@ techniques:
   # ---- INJ (Initial Injection) ----
   - id: CUT-INJ-001
     name: Direct Prompt Injection
+    alias: coax
     tactic: INJ
     layer: delivery
-    targets: [orchestrator]
-    desc: Untrusted instruction delivered on the user channel.
-    status: planned
+    targets: [orchestrator, human]
+    desc: >-
+      Talk straight to the agent on the user channel and make it obey you over its own
+      instructions. A battery of override / role-play / system-spoof payloads (plus an encoded
+      variant), each scored by an unambiguous oracle — the agent emitting an attacker-chosen
+      token it would never otherwise say — plus a system-prompt/secret extraction probe. Runs
+      offline against the range's MockChatAgent or a real remote agent via chat+http(s)://.
+      Mitigation: hard trust boundary between system prompt and user input; canonicalize before
+      guards; don't reflect attacker tokens verbatim.
+    status: implemented
   - id: CUT-INJ-002
     name: Indirect Injection via RAG/Document
     alias: deaddrop
