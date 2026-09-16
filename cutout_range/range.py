@@ -160,6 +160,24 @@ class Range:
         """Remove any installed guardrail (restore the no-filtering default posture)."""
         self.orchestrator.guardrail = None
 
+    def plant_canary(self, content: str) -> str:
+        """Plant a benign canary file in the fs-tools virtual filesystem; return its path.
+
+        Lets CUT-DISC-004's canary oracle confirm file-read *definitively* against the
+        offline range (a tool that returns this content has provably read the file), the
+        same way a real temp-file canary works against a live local server.
+        """
+        name = f"cutout-canary-{secrets.token_hex(6)}.txt"
+        fs = self.servers["fs-tools"]
+        assert isinstance(fs, FilesystemToolServer)
+        fs.plant(name, content)
+        return name
+
+    def remove_canary(self, path: str) -> None:
+        fs = self.servers["fs-tools"]
+        assert isinstance(fs, FilesystemToolServer)
+        fs.unplant(path)
+
     async def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
         """Invoke a tool by name with attacker-controlled args, unauthenticated.
 

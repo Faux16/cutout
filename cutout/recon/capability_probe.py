@@ -8,7 +8,10 @@ target (a real server or the bundled range), classify candidate tools and probe:
   (``read_text``/``read_blob``), and path-taking file tools. Probe a benign, non-existent
   path: a function that *executes* while another is *blocked* (or a "no such file" from a
   path tool) is a file-read candidate; a validation refusal is defended. No real file is
-  read — the oracle only distinguishes "tried to open" from "refused".
+  read — the oracle only distinguishes "tried to open" from "refused". With the ``canary``
+  option, confirmation is *definitive* instead of heuristic: plant a benign canary file
+  holding a random token, read it back through the tool, and confirm only if that exact
+  token returns — proof of file read that still touches no real data.
 * **SSRF** — outbound-fetch tools. Probe loopback (a closed high port) and TEST-NET-1
   (RFC 5737, reserved/unroutable): reaching either means no egress filtering — a
   server-side request forgery sink. Cloud metadata is deliberately *not* auto-probed.
@@ -25,8 +28,12 @@ are the offline analogues.
 
 from __future__ import annotations
 
+import contextlib
 import inspect
 import secrets
+import tempfile
+from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from cutout_range import connect_range
@@ -260,6 +267,43 @@ def _envelope_text(res: dict[str, Any]) -> str:
     return f"{res.get('error', '')} {res.get('text', '')} {res.get('data', '')}"
 
 
+_CANARY_PREFIX = "cutout-canary"
+
+
+def _plant_canary(rng: Any, canary_dir: str) -> tuple[str, str, Callable[[], None]]:
+    """Plant a benign canary file and return ``(path, token, cleanup)``.
+
+    Definitive, safe confirmation: the canary holds only a random token, so a tool that
+    returns that token has *provably* read the file — no real data is ever touched. For the
+    in-process range the canary goes into its virtual filesystem; for a real (local) target
+    it is a real temp file the local server can read. The caller reads it back through the
+    tool under test and matches the token.
+    """
+    token = secrets.token_hex(16)
+    content = f"{_CANARY_PREFIX}::{token}"
+    plant = getattr(rng, "plant_canary", None)
+    if callable(plant):
+        path = str(plant(content))
+
+        def _cleanup_range() -> None:
+            remover = getattr(rng, "remove_canary", None)
+            if callable(remover):
+                remover(path)
+
+        return path, token, _cleanup_range
+
+    base = Path(canary_dir) if canary_dir else Path(tempfile.gettempdir())
+    base.mkdir(parents=True, exist_ok=True)
+    real = base / f"{_CANARY_PREFIX}-{token[:12]}.txt"
+    real.write_text(content, encoding="utf-8")
+
+    def _cleanup_file() -> None:
+        with contextlib.suppress(OSError):
+            real.unlink()
+
+    return str(real), token, _cleanup_file
+
+
 @register
 class FilesystemDiscovery(BaseModule):
     id = "CUT-DISC-004"
@@ -270,6 +314,18 @@ class FilesystemDiscovery(BaseModule):
     options: dict[str, Option] = {
         "probe_path": Option(
             help="Benign non-existent path to probe with (default: a random one).",
+            required=False,
+            default="",
+        ),
+        "canary": Option(
+            help="Plant a benign canary file and confirm file-read by its unique contents "
+            "(definitive + safe — reads only your own random token, never real data).",
+            required=False,
+            default=False,
+            type="bool",
+        ),
+        "canary_dir": Option(
+            help="Directory to plant the canary in for a real target (default: system temp).",
             required=False,
             default="",
         ),
@@ -314,15 +370,55 @@ class FilesystemDiscovery(BaseModule):
 
     async def run(self, session: Session) -> RunResult:
         rng = connect_range(session.target)
-        probe_path = self.opts.get("probe_path") or (
-            f"/nonexistent/cutout-probe-{secrets.token_hex(6)}"
-        )
-        await self.emit(Phase.RUN, "frisk.begin", {"probe_path": probe_path})
+        canary = bool(self.opts.get("canary"))
+        canary_token: str | None = None
+        cleanup: Callable[[], None] | None = None
+        if canary:
+            probe_path, canary_token, cleanup = _plant_canary(
+                rng, str(self.opts.get("canary_dir") or "")
+            )
+        else:
+            probe_path = self.opts.get("probe_path") or (
+                f"/nonexistent/cutout-probe-{secrets.token_hex(6)}"
+            )
+        await self.emit(Phase.RUN, "frisk.begin", {"probe_path": probe_path, "canary": canary})
 
         specs = rng.list_tools()
         candidates = self._candidates(specs)
-        findings: list[dict[str, Any]] = []
+        try:
+            findings = await self._probe(rng, candidates, probe_path, canary_token)
+        finally:
+            if cleanup is not None:
+                cleanup()
 
+        for f in findings:
+            session.graph.add_node(f["tool"], kind="tool", resource_reach=True)
+        session.artifacts["resource_findings"] = findings
+
+        await self.emit(
+            Phase.RUN,
+            "frisk.result",
+            {"candidates": len(candidates), "confirmed": len(findings)},
+        )
+        status = "success" if candidates else "skipped"
+        if findings:
+            hot = ", ".join(f"{f['tool']} ({f['capability'].split(' (')[0]})" for f in findings)
+            summary = (
+                f"resource reach CONFIRMED on {len(findings)}/{len(candidates)} "
+                f"candidate tool(s): {hot}"
+            )
+        else:
+            summary = f"probed {len(candidates)} candidate tool(s); no resource reach confirmed"
+        return RunResult(status=status, summary=summary, data={"findings": findings})
+
+    async def _probe(
+        self,
+        rng: Any,
+        candidates: list[tuple[Any, str | None, str | None, str | None, str | None]],
+        probe_path: str,
+        canary_token: str | None,
+    ) -> list[dict[str, Any]]:
+        findings: list[dict[str, Any]] = []
         for spec, sql_key, path_key, fetch_key, exec_key in candidates:
             qualified = spec.qualified()
 
@@ -333,14 +429,22 @@ class FilesystemDiscovery(BaseModule):
             if sql_key:
                 reachable_funcs: list[str] = []
                 blocked_funcs: list[str] = []
+                canary_confirmed = False
                 for func in _SQL_FILE_FUNCS:
                     payload = f"SELECT content FROM {func}('{probe_path}')"
                     res = await self._call(rng, spec.name, {sql_key: payload})
-                    verdict = _sql_verdict(res)
+                    hit = canary_token is not None and canary_token in _envelope_text(res)
+                    verdict = "reachable" if hit else _sql_verdict(res)
+                    canary_confirmed = canary_confirmed or hit
                     await self.emit(
                         Phase.RUN,
                         "frisk.probe",
-                        {"tool": qualified, "vector": f"sql:{func}", "verdict": verdict},
+                        {
+                            "tool": qualified,
+                            "vector": f"sql:{func}",
+                            "verdict": verdict,
+                            "canary": hit,
+                        },
                     )
                     if verdict == "reachable":
                         reachable_funcs.append(func)
@@ -348,6 +452,11 @@ class FilesystemDiscovery(BaseModule):
                         blocked_funcs.append(func)
                 if reachable_funcs:
                     gap = f" while {', '.join(blocked_funcs)} was blocked" if blocked_funcs else ""
+                    confirm = (
+                        " Confirmed: the tool returned the planted canary's contents."
+                        if canary_confirmed
+                        else ""
+                    )
                     findings.append(
                         {
                             "tool": qualified,
@@ -356,10 +465,11 @@ class FilesystemDiscovery(BaseModule):
                             "reachable_functions": reachable_funcs,
                             "blocked_functions": blocked_funcs,
                             "severity": "high",
+                            "confirmed": "canary" if canary_confirmed else "probe",
                             "detail": (
                                 f"{', '.join(reachable_funcs)} executed through the query "
                                 f"tool{gap} — arbitrary local file read candidate "
-                                "(filesystem-denylist gap)."
+                                f"(filesystem-denylist gap).{confirm}"
                             ),
                         }
                     )
@@ -367,22 +477,34 @@ class FilesystemDiscovery(BaseModule):
             # 2) Path file-read: hand the tool a made-up path directly.
             if path_key and not any(f["tool"] == qualified for f in findings):
                 res = await self._call(rng, spec.name, {path_key: probe_path})
-                verdict = _classify(_envelope_text(res))
+                hit = canary_token is not None and canary_token in _envelope_text(res)
+                verdict = "reachable" if hit else _classify(_envelope_text(res))
                 await self.emit(
                     Phase.RUN,
                     "frisk.probe",
-                    {"tool": qualified, "vector": f"path:{path_key}", "verdict": verdict},
+                    {
+                        "tool": qualified,
+                        "vector": f"path:{path_key}",
+                        "verdict": verdict,
+                        "canary": hit,
+                    },
                 )
                 if verdict == "reachable":
+                    confirm = (
+                        " Confirmed: the tool returned the planted canary's contents."
+                        if hit
+                        else ""
+                    )
                     findings.append(
                         {
                             "tool": qualified,
                             "capability": "local file read (path parameter)",
                             "vector": f"{path_key}=<path>",
                             "severity": "high",
+                            "confirmed": "canary" if hit else "probe",
                             "detail": (
                                 "the tool opened an attacker-supplied path — path "
-                                "traversal / arbitrary file read candidate."
+                                f"traversal / arbitrary file read candidate.{confirm}"
                             ),
                         }
                     )
@@ -459,22 +581,4 @@ class FilesystemDiscovery(BaseModule):
                         )
                         break  # one confirmed exec vector per tool is enough
 
-        for f in findings:
-            session.graph.add_node(f["tool"], kind="tool", resource_reach=True)
-        session.artifacts["resource_findings"] = findings
-
-        await self.emit(
-            Phase.RUN,
-            "frisk.result",
-            {"candidates": len(candidates), "confirmed": len(findings)},
-        )
-        status = "success" if candidates else "skipped"
-        if findings:
-            hot = ", ".join(f"{f['tool']} ({f['capability'].split(' (')[0]})" for f in findings)
-            summary = (
-                f"resource reach CONFIRMED on {len(findings)}/{len(candidates)} "
-                f"candidate tool(s): {hot}"
-            )
-        else:
-            summary = f"probed {len(candidates)} candidate tool(s); no resource reach confirmed"
-        return RunResult(status=status, summary=summary, data={"findings": findings})
+        return findings
