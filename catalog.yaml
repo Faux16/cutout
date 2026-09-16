@@ -81,3 +81,7 @@ techniques:
     name: Self-Propagating Agent Worm
     tactic: LAT
     targets: [a2a, memory]
+  - id: CUT-EXEC-004
+    name: Code Execution via Interpreter Tool
+    tactic: EXEC
+    targets: [tool]

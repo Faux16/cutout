@@ -58,7 +58,7 @@ def test_use_by_alias(tmp_path: Path) -> None:
 def test_use_by_index_and_substring(tmp_path: Path) -> None:
     con = _console(tmp_path)
     # Index selection requires a prior listing (msfconsole's `use 0`).
-    con.onecmd("search exec")
+    con.onecmd("search puppet")
     assert con._listing == ["CUT-EXEC-001"]
     con.onecmd("use 0")
     assert con.current == "CUT-EXEC-001"

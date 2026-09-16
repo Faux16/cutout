@@ -149,11 +149,17 @@ techniques:
     status: planned
   - id: CUT-EXEC-004
     name: Code Execution via Interpreter Tool
+    alias: breakout
     tactic: EXEC
     layer: payloads
     targets: [tool]
-    desc: Reach code execution through a code-interpreter/exec tool.
-    status: planned
+    desc: >-
+      Weaponize a code-interpreter / command-exec tool: prove arbitrary evaluation, then read
+      the filesystem, dump the process environment, and run shell commands through it, harvesting
+      whatever credentials fall out — one tool, no injection, no token. Mitigation: sandbox the
+      interpreter (no fs/net/env), allowlist operations instead of exposing eval, and strip
+      secrets from the environment it inherits.
+    status: implemented
   - id: CUT-EXEC-005
     name: Confused-Deputy Invocation
     tactic: EXEC

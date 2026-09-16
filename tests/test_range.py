@@ -8,15 +8,23 @@ from cutout_range import Range
 from cutout_range.range import DELEGATED_TOKEN
 
 
-async def test_command_server_is_arithmetic_only_sandbox() -> None:
-    # The range's "code interpreter" models an RCE surface but is a SAFE arithmetic-only
-    # evaluator: it computes expressions, and refuses anything with names/calls/imports.
+async def test_command_server_models_rce_without_real_exec() -> None:
+    # The range's "code interpreter" models an RCE surface but NEVER runs real code: a safe
+    # arithmetic evaluator backs the benign probe, and pattern recognizers return fixtures
+    # for file/env/command payloads (CUT-EXEC-004's surface).
     rng = Range()
     ok = await rng.call_tool("run_python", {"code": "print(6*7)"})
     assert ok["ok"] and ok["data"] == "42"
-    for danger in ("__import__('os').system('id')", "open('/etc/passwd').read()", "1+len('x')"):
-        res = await rng.call_tool("run_python", {"code": danger})
-        assert res["ok"] is False  # never executes real code
+    # File/env/command payloads return FIXTURES (modeled), not the result of real execution.
+    f = await rng.call_tool("run_python", {"code": "open('/etc/passwd').read()"})
+    assert f["ok"] and "root:x:0:0" in f["data"]
+    c = await rng.call_tool("run_python", {"code": "os.popen('id').read()"})
+    assert c["ok"] and "uid=1000" in c["data"]
+    # Genuinely unsupported code (names/calls the mock doesn't recognize) still errors —
+    # it is never actually evaluated.
+    for unsupported in ("__import__('os').system('rm -rf /')", "1+len('x')"):
+        res = await rng.call_tool("run_python", {"code": unsupported})
+        assert res["ok"] is False
 
 
 async def test_benign_task_triggers_no_tool_calls() -> None:
