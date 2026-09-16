@@ -66,6 +66,42 @@ class A2AResult(BaseModel):
     tool_calls: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class InfectionOutcome(BaseModel):
+    """What happened when a worm reached one agent."""
+
+    newly_infected: bool
+    payload_fired: bool = False
+    tool_calls: list[dict[str, Any]] = Field(default_factory=list)
+    looted_secret: str | None = None
+    peers: list[str] = Field(default_factory=list)  # neighbors to propagate to next
+
+
+class InfectionEvent(BaseModel):
+    """One node in the worm's infection tree."""
+
+    agent: str
+    infected_by: str
+    hop: int
+    payload_fired: bool = False
+    tool_calls: list[dict[str, Any]] = Field(default_factory=list)
+    looted_secret: str | None = None
+    forwarded_to: list[str] = Field(default_factory=list)
+    reinfection_blocked: bool = False
+
+
+class WormReport(BaseModel):
+    """The full autonomous-propagation run: who got infected, from whom, and what leaked."""
+
+    signature: str
+    seed: str
+    total_agents: int = 0
+    infected: list[str] = Field(default_factory=list)
+    events: list[InfectionEvent] = Field(default_factory=list)
+    loot: dict[str, str] = Field(default_factory=dict)  # agent -> looted secret
+    max_hop: int = 0
+    blocked_reinfections: int = 0
+
+
 def _parse_actions(text: str, source: str) -> list[PlannedAction]:
     actions: list[PlannedAction] = []
     for match in _ACTION.finditer(text):
@@ -205,6 +241,8 @@ class PeerAgent:
         servers: dict[str, ToolServer],
         tool_index: dict[str, str],
         delegated_token: str,
+        peers: list[str] | None = None,
+        local_secret: str | None = None,
     ) -> None:
         self.id = agent_id
         self._servers = servers
@@ -212,6 +250,13 @@ class PeerAgent:
         self._token = delegated_token
         # Shared memory / blackboard this agent reads on its cycle (CUT-LAT-002 target).
         self.memory = SharedMemory()
+        # The agents this one can message — the edges a worm propagates along (CUT-LAT-006).
+        self.peers: list[str] = list(peers) if peers else []
+        # A session token / credential this agent holds; a worm loots it on infection.
+        self.local_secret: str | None = local_secret
+        # Which worm has already infected this agent — the guard that makes a cyclic mesh
+        # terminate (a worm that re-infects forever is a broken worm).
+        self.worm_signature: str | None = None
 
     async def _execute(self, actions: list[PlannedAction]) -> list[dict[str, Any]]:
         calls: list[dict[str, Any]] = []
@@ -267,3 +312,24 @@ class PeerAgent:
         result.obeyed_injected = bool(actions)
         result.tool_calls = await self._execute(actions)
         return result
+
+    async def infect(self, signature: str, payload: str) -> InfectionOutcome:
+        """Receive a worm. On FIRST contact: run its payload, loot the local secret, drop a
+        self-copy into memory (so it re-fires on this agent's own cycle), and expose this
+        agent's peers so the worm can propagate onward. A repeat with the same signature is
+        refused — the idempotence that makes propagation across a cyclic mesh terminate.
+        """
+        if self.worm_signature == signature:
+            return InfectionOutcome(newly_infected=False)
+        self.worm_signature = signature
+        actions = _parse_actions(payload, f"worm:{signature}")
+        calls = await self._execute(actions)
+        # Persistence + the RAG/memory propagation channel: leave a live copy behind.
+        self.memory.write(f"worm:{signature}", payload)
+        return InfectionOutcome(
+            newly_infected=True,
+            payload_fired=bool(actions),
+            tool_calls=calls,
+            looted_secret=self.local_secret,
+            peers=list(self.peers),
+        )

@@ -74,8 +74,8 @@ then `use` a module and `run`. Modules go by memorable aliases (`puppet`, not
 
 ```
 cutout > scan
-scan complete — enumerated 10 tools (3 sensitive) across 5 servers; 1 peer agent(s)
-cutout > hosts        # orchestrator + 5 MCP servers + the billing-agent peer
+scan complete — enumerated 10 tools (3 sensitive) across 5 servers; 4 peer agent(s)
+cutout > hosts        # orchestrator + 5 MCP servers + a 4-agent A2A mesh
 cutout > services     # every tool, sensitive ones flagged
 cutout > use deaddrop
 cutout (deaddrop) > run
@@ -133,13 +133,14 @@ not `use CUT-EXEC-001` (the ID stays canonical; the alias is the ergonomic handl
 | `dragnet` | `CUT-COLL-003` | Collection | Bulk-collect records + files, stage one bundle for exfil |
 | `courier` | `CUT-LAT-001` | Lateral Movement | Agent-to-agent propagation (direct A2A message) |
 | `brushpass` | `CUT-LAT-002` | Lateral Movement | Shared-memory pivot (indirect, via a store the peer reads) |
+| `contagion` | `CUT-LAT-006` | Lateral Movement | Self-propagating agent worm — one seed cascades across the A2A mesh, looting each host |
 | `siphon` | `CUT-EXFIL-001` | Exfiltration | Outbound tool-call exfil (data in a URL) |
 | `heist` | `CUT-IMP-001` | Impact | Unauthorized transaction, then verify + quantify via the ledger |
 | `ladder` | `CUT-PRIV-002` | Privilege Escalation | Chain low-scope tools (mint an export handle → redeem it) to reach data a scoped tool gates |
 | `smuggler` | `CUT-EVAS-001` | Defense Evasion | Encode a directive (base64 / zero-width / homoglyph) past a raw-text guardrail |
 | `rollcall` | `CUT-INV-001` | (plumbing) | Session inventory reference stub |
 
-**17 modules, every tactic** — `cutout catalog` shows the live implemented/planned split, and
+**18 modules, every tactic** — `cutout catalog` shows the live implemented/planned split, and
 `cutout hunt <mcp-target>` chains recon → `frisk` → drafted findings against a real server.
 
 ## The range
@@ -153,7 +154,9 @@ each map to a technique:
   whose low-scope tools chain into a privilege escalation);
 - a poisonable, unauthenticated **RAG corpus**;
 - a **billing-agent** in its own trust zone with a privileged `payments` tool the
-  orchestrator cannot reach — and a world-writable **shared memory** it reads.
+  orchestrator cannot reach — and a world-writable **shared memory** it reads;
+- a **mesh of peer agents** (billing, support, analytics, it-admin) wired to each other by
+  A2A trust edges — including a cycle — that a self-propagating worm cascades across.
 
 **Offline, zero-dependency (default):** the modules drive the range as in-process Python
 objects. Nothing to start.
@@ -217,7 +220,7 @@ systems, coordinated disclosure, and scope, see [ETHICS.md](ETHICS.md).
 
 ## Status & roadmap
 
-Phase 0 complete, Phase 1 underway — engine, console, 17 modules across every tactic, the
+Phase 0 complete, Phase 1 underway — engine, console, 18 modules across every tactic, the
 published CTX taxonomy page, and the offline + networked-MCP range all landed. See
 [ROADMAP.md](ROADMAP.md).
 
