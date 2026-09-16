@@ -126,6 +126,7 @@ not `use CUT-EXEC-001` (the ID stays canonical; the alias is the ergonomic handl
 | `frisk` | `CUT-DISC-004` | Discovery | Probe tools for reachable resources: file read, SSRF, command exec |
 | `deaddrop` | `CUT-INJ-002` | Initial Injection | Indirect injection via a poisoned RAG document |
 | `puppet` | `CUT-EXEC-001` | Execution | Coerced tool invocation → credential harvest |
+| `breakout` | `CUT-EXEC-004` | Execution | Weaponize a code-interpreter tool: read files, dump env, run commands, harvest creds |
 | `keyring` | `CUT-CRED-003` | Credential Access | Read `.env`/config via the agent's delegated token |
 | `sleeper` | `CUT-PERS-001` | Persistence | Durable RAG implant that re-triggers on any query |
 | `revenant` | `CUT-PERS-002` | Persistence | Memory implant — re-fires on every agent cycle from one write |
@@ -140,7 +141,7 @@ not `use CUT-EXEC-001` (the ID stays canonical; the alias is the ergonomic handl
 | `smuggler` | `CUT-EVAS-001` | Defense Evasion | Encode a directive (base64 / zero-width / homoglyph) past a raw-text guardrail |
 | `rollcall` | `CUT-INV-001` | (plumbing) | Session inventory reference stub |
 
-**18 modules, every tactic** — `cutout catalog` shows the live implemented/planned split, and
+**19 modules, every tactic** — `cutout catalog` shows the live implemented/planned split, and
 `cutout hunt <mcp-target>` chains recon → `frisk` → drafted findings against a real server.
 
 ## The range
@@ -220,7 +221,7 @@ systems, coordinated disclosure, and scope, see [ETHICS.md](ETHICS.md).
 
 ## Status & roadmap
 
-Phase 0 complete, Phase 1 underway — engine, console, 18 modules across every tactic, the
+Phase 0 complete, Phase 1 underway — engine, console, 19 modules across every tactic, the
 published CTX taxonomy page, and the offline + networked-MCP range all landed. See
 [ROADMAP.md](ROADMAP.md).
 

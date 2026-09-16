@@ -284,18 +284,53 @@ def _safe_arith(node: ast.AST) -> float:
     raise ValueError("unsupported expression")
 
 
+# Recognizers that read an interpreter payload's INTENT — file read, environment access,
+# shell command — without executing anything. They let the range model the *consequences*
+# of interpreter RCE (CUT-EXEC-004) from fixtures while staying a pure, safe mock.
+_RCE_FILE = re.compile(r"\b(?:open|read_text|read_file|readfile|Path)\s*\(\s*['\"]([^'\"]+)['\"]")
+_RCE_ENV_KEY = re.compile(r"(?:getenv|environ)\s*(?:\(|\[)\s*['\"](\w+)['\"]")
+_RCE_ENV_ALL = re.compile(r"os\.environ\b(?!\s*\[)|(?:^|\W)printenv\b|(?:^|\s)env$")
+_RCE_CMD = re.compile(
+    r"(?:os\.system|os\.popen|subprocess\.(?:run|call|check_output|check_call|Popen))"
+    r"\s*\(\s*\[?\s*['\"]([^'\"]+)['\"]"
+)
+
+
 class CommandServer(ToolServer):
     """A dev 'code interpreter' tool — the range's deliberately-vulnerable RCE surface.
 
-    In the range's fiction this runs arbitrary Python with no authorization. The
-    implementation is a SAFE arithmetic-only evaluator (no subprocess, os, builtins, or
-    names), so the shipped range can never actually execute attacker code — but it
-    faithfully models an interpreter tool: it returns the computed output of the
-    expression it is handed, which is exactly what a capability probe (CUT-DISC-004 /
-    ``frisk``) confirms.
+    In the range's fiction this runs arbitrary Python with no authorization (note ``call``
+    never checks the credential). The implementation NEVER executes attacker code: a SAFE
+    arithmetic-only evaluator backs the capability probe (``print(a*b)`` returns the
+    product, which is what CUT-DISC-004 / ``frisk`` confirms), and a set of pattern
+    recognizers *model the consequences* of code execution — reading a file, dumping the
+    environment, running a shell command — by returning fixtures. That lets CUT-EXEC-004
+    (``breakout``) weaponize the interpreter for real (fake) loot without any real exec.
+    All fixture values are obvious ``cutrange_FAKE_*`` placeholders.
     """
 
     id = "code-exec"
+
+    def __init__(self) -> None:
+        self._files: dict[str, str] = {
+            "/etc/passwd": (
+                "root:x:0:0:root:/root:/bin/bash\napp:x:1000:1000::/home/app:/bin/bash\n"
+            ),
+            ".env": "API_KEY=cutrange_FAKE_env_key\nDB_PASSWORD=cutrange-fixture-pw\n",
+            "app/secrets.json": '{"stripe_key": "cutrange_FAKE_stripe_key"}\n',
+        }
+        self._env: dict[str, str] = {
+            "AWS_SECRET_ACCESS_KEY": "cutrange_FAKE_aws_secret",
+            "OPENAI_API_KEY": "cutrange_FAKE_openai_key",
+            "PATH": "/usr/local/bin:/usr/bin:/bin",
+        }
+        self._commands: dict[str, str] = {
+            "whoami": "app",
+            "id": "uid=1000(app) gid=1000(app) groups=1000(app)",
+            "hostname": "cutout-range",
+            "uname -a": "Linux cutout-range 6.1.0 x86_64 GNU/Linux",
+            "ls": ".env\napp\nrequirements.txt",
+        }
 
     def list_tools(self) -> list[ToolSpec]:
         return [
@@ -308,10 +343,49 @@ class CommandServer(ToolServer):
             ),
         ]
 
+    def _read_file(self, path: str) -> ToolResult:
+        content = self._files.get(path)
+        if content is None:
+            return ToolResult(
+                ok=False, tool="run_python", error=f"No such file or directory: {path}"
+            )
+        return ToolResult(ok=True, tool="run_python", data=content)
+
+    def _interpret_rce(self, code: str) -> ToolResult | None:
+        """Model interpreter RCE from fixtures. Returns None if `code` is not an RCE form."""
+        m = _RCE_FILE.search(code)
+        if m:  # a Python file-read idiom: open('x')/read_text('x')/Path('x')
+            return self._read_file(m.group(1))
+        m = _RCE_ENV_KEY.search(code)
+        if m:
+            key = m.group(1)
+            val = self._env.get(key)
+            return ToolResult(ok=True, tool="run_python", data=f"{key}={val}" if val else "")
+        if _RCE_ENV_ALL.search(code):
+            dump = "\n".join(f"{k}={v}" for k, v in self._env.items())
+            return ToolResult(ok=True, tool="run_python", data=dump)
+        m = _RCE_CMD.search(code)
+        cmd = m.group(1).strip() if m else (code if code in self._commands else None)
+        if m is None and code.startswith("cat "):
+            cmd = code  # a bare `cat <path>` shell read
+        if cmd is not None:
+            if cmd.startswith("cat "):  # shell file read (also via os.popen('cat ...'))
+                return self._read_file(cmd[4:].strip())
+            out = self._commands.get(cmd)
+            if out is None:
+                return ToolResult(ok=False, tool="run_python", error=f"{cmd}: command not found")
+            return ToolResult(ok=True, tool="run_python", data=out)
+        return None
+
     async def call(self, tool: str, args: dict[str, Any], *, credential: str | None) -> ToolResult:
         if tool != "run_python":
             return ToolResult(ok=False, tool=tool, error="no such tool")
         code = str(args.get("code", "")).strip()
+        # Model the consequences of code execution (file/env/command) before falling back
+        # to the safe arithmetic evaluator that backs the benign capability probe.
+        rce = self._interpret_rce(code)
+        if rce is not None:
+            return rce
         expr = code
         # Support the common interpreter-probe form print(<expr>).
         match = re.fullmatch(r"print\((.*)\)", code, re.DOTALL)
