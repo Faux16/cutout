@@ -55,7 +55,7 @@ def test_hunt_requires_exactly_one_of_target_or_targets(tmp_path: Path) -> None:
 
 
 def test_batch_survey_aggregates_and_writes_report(tmp_path: Path, monkeypatch) -> None:
-    async def fake_hunt(target: str, transcript: Path) -> Session:
+    async def fake_hunt(target: str, transcript: Path, canary: bool = False) -> Session:
         if "bad" in target:
             raise RuntimeError("server did not come up")
         return Session(

@@ -221,6 +221,12 @@ def hunt(
         "--report",
         help="Batch mode: write the aggregated results as JSON (+ a Markdown table alongside).",
     ),
+    canary: bool = typer.Option(
+        False,
+        "--canary",
+        help="Confirm file-read definitively by planting a benign canary and matching its "
+        "unique contents (safe: reads only your own random token, never real data).",
+    ),
 ) -> None:
     """Recon + frisk real MCP server(s) and draft findings (the OSS-hunt workflow).
 
@@ -238,7 +244,7 @@ def hunt(
     if target:
         transcript = out or _default_transcript("hunt")
         try:
-            session = asyncio.run(_hunt(target, transcript))
+            session = asyncio.run(_hunt(target, transcript, canary=canary))
         except (CutoutError, OptionError) as exc:
             err_console.print(f"[red]error:[/red] {exc}")
             raise typer.Exit(code=1) from exc
@@ -263,18 +269,19 @@ def hunt(
         err_console.print(f"[red]error:[/red] no targets in {targets}")
         raise typer.Exit(code=1)
 
-    records = _hunt_batch(entries)
+    records = _hunt_batch(entries, canary=canary)
     _render_survey(records)
     if report:
         _write_report(records, report)
 
 
-async def _hunt(target: str, transcript: Path) -> Session:
+async def _hunt(target: str, transcript: Path, canary: bool = False) -> Session:
     session = Session(target=TargetDescriptor(uri=target))
+    frisk_opts = {"canary": "true"} if canary else None
     async with EvidenceWriter(transcript) as writer:
         engine = Engine(session=session, writer=writer)
         await engine.run("CUT-RECON-001")  # casing — enumerate tools/hosts
-        await engine.run("CUT-DISC-004")  # frisk — probe reachable resources
+        await engine.run("CUT-DISC-004", frisk_opts)  # frisk — probe reachable resources
     return session
 
 
@@ -380,13 +387,13 @@ def _survey_record(target: str, session: Session, transcript: Path) -> dict:
     }
 
 
-def _hunt_batch(entries: list[str]) -> list[dict]:
+def _hunt_batch(entries: list[str], canary: bool = False) -> list[dict]:
     records: list[dict] = []
     for i, target in enumerate(entries, 1):
         console.print(f"[dim]hunting[/dim] [{i}/{len(entries)}] [cyan]{target}[/cyan] …")
         transcript = _default_transcript(f"hunt-{_survey_slug(target)}")
         try:
-            session = asyncio.run(_hunt(target, transcript))
+            session = asyncio.run(_hunt(target, transcript, canary=canary))
             records.append(_survey_record(target, session, transcript))
         except Exception as exc:  # a target that won't come up must not sink the survey
             records.append(

@@ -152,6 +152,13 @@ class FilesystemToolServer(ToolServer):
             ".env": "API_KEY=cutrange_FAKE_env_key\nDB_PASSWORD=cutrange-fixture-pw\n",
         }
 
+    def plant(self, path: str, content: str) -> None:
+        """Add a file to the virtual fs (used to plant a read-confirmation canary)."""
+        self._files[path] = content
+
+    def unplant(self, path: str) -> None:
+        self._files.pop(path, None)
+
     def list_tools(self) -> list[ToolSpec]:
         return [
             ToolSpec(

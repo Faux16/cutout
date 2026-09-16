@@ -181,6 +181,15 @@ aggregate) and a `survey.md` table alongside. Each ✓ is a **candidate**, not a
 before reporting. **Only survey servers you run yourself in isolation, or are explicitly
 authorized to test (see ETHICS.md).**
 
+**`--canary` — definitive, safe file-read confirmation.** Add `--canary` (single or batch) to
+upgrade file-read from a *heuristic* ("the tool errored like it tried to open a path") to a
+*proof*: Cutout plants a benign canary file containing a random token, asks the tool to read it,
+and only confirms if that exact token comes back. It reads **only your own random token, never
+real data**, and cleans the canary up afterwards. Against a real local server the canary is a
+temp file (`--canary-dir` to choose where via `cutout run CUT-DISC-004 --opt canary_dir=…`);
+against the bundled range it lives in the range's virtual filesystem. Confirmed findings are
+tagged `confirmed: canary`.
+
 With the networked range, planted state (RAG docs, shared memory) persists **server-side**
 between separate commands, so a chain composes across processes. Reset it with
 `docker compose restart`; tear it down with `docker compose down`.

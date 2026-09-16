@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -10,10 +12,11 @@ from cutout.recon.capability_probe import (
     FilesystemDiscovery,
     _classify,
     _exec_verdict,
+    _plant_canary,
     _sql_verdict,
     _ssrf_verdict,
 )
-from cutout_range import reset_ranges
+from cutout_range import connect_range, reset_ranges
 
 
 @pytest.fixture(autouse=True)
@@ -126,6 +129,45 @@ async def test_frisk_confirms_command_exec_on_range() -> None:
     # code-exec.run_python evaluates the expression and returns the result -> confirmed.
     assert any(f["tool"] == "code-exec.run_python" for f in ex)
     assert ex[0]["severity"] == "critical"
+
+
+def test_plant_canary_real_file_for_non_range_target(tmp_path: Path) -> None:
+    # A target without a plant hook (a real server) gets a real temp-file canary.
+    class _NoPlant:
+        pass
+
+    path, token, cleanup = _plant_canary(_NoPlant(), str(tmp_path))
+    p = Path(path)
+    assert p.exists() and token in p.read_text(encoding="utf-8")
+    cleanup()
+    assert not p.exists()  # cleaned up
+
+
+def test_plant_canary_uses_range_virtual_fs() -> None:
+    rng = connect_range(_session().target)
+    path, token, cleanup = _plant_canary(rng, "")
+
+    async def _check() -> None:
+        res = await rng.call_tool("read_file", {"path": path})
+        assert res["ok"] and token in str(res["data"])  # readable through the tool
+        cleanup()
+        gone = await rng.call_tool("read_file", {"path": path})
+        assert gone["ok"] is False  # removed on cleanup
+
+    asyncio.run(_check())
+
+
+async def test_frisk_canary_confirms_file_read_definitively() -> None:
+    session = _session()
+    engine = Engine(session=session)
+    await engine.run("CUT-DISC-004", {"canary": "true"})
+
+    findings = session.artifacts["resource_findings"]
+    read = [f for f in findings if f["tool"] == "fs-tools.read_file"]
+    assert read, "canary read-back should confirm fs-tools.read_file"
+    # Definitive: confirmed by the tool returning the planted canary's contents.
+    assert read[0]["confirmed"] == "canary"
+    assert "returned the planted canary" in read[0]["detail"]
 
 
 async def test_frisk_skips_when_no_candidates() -> None:
