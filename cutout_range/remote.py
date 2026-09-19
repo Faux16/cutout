@@ -21,6 +21,7 @@ from .agent import A2AResult, OrchestratorResult
 from .corpus import Document
 from .hosts import HostInfo
 from .memory import MemoryNote
+from .ticketing import Ticket
 from .tool_servers import ToolSpec
 
 _TIMEOUT = httpx.Timeout(15.0)
@@ -63,6 +64,37 @@ class RemoteCorpus:
         resp = httpx.get(f"{self.base_url}/corpus/documents", timeout=_TIMEOUT)
         resp.raise_for_status()
         return [Document.model_validate(d) for d in resp.json()["documents"]]
+
+
+class RemoteTicketQueue:
+    """Client for an agent's ticket queue (unauthenticated filing = the vuln, over HTTP)."""
+
+    def __init__(self, agent_url: str) -> None:
+        self.base_url = agent_url.rstrip("/")
+
+    def writable(self) -> bool:
+        return True
+
+    def file(self, subject: str, body: str, requester: str = "anonymous") -> Ticket:
+        resp = httpx.post(
+            f"{self.base_url}/tickets/file",
+            json={"subject": subject, "body": body, "requester": requester},
+            timeout=_TIMEOUT,
+        )
+        resp.raise_for_status()
+        return Ticket.model_validate(resp.json())
+
+    @property
+    def tickets(self) -> list[Ticket]:
+        resp = httpx.get(f"{self.base_url}/tickets", timeout=_TIMEOUT)
+        resp.raise_for_status()
+        return [Ticket.model_validate(t) for t in resp.json()["tickets"]]
+
+    def pending(self) -> list[Ticket]:
+        return [t for t in self.tickets if t.status == "open"]
+
+    def __len__(self) -> int:
+        return len(self.tickets)
 
 
 class RemoteOrchestrator:
@@ -158,5 +190,21 @@ class RemoteRange:
         url = self.agents[to_agent].rstrip("/")
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             resp = await client.post(f"{url}/memory/process")
+        resp.raise_for_status()
+        return A2AResult.model_validate(resp.json())
+
+    # ---- ticket queue (CUT-INJ-005), reached over HTTP -----------------------
+    def ticket_queue(self, agent: str = "support-agent") -> RemoteTicketQueue:
+        return RemoteTicketQueue(self.agents[agent])
+
+    def file_ticket(
+        self, subject: str, body: str, requester: str = "anonymous", *, agent: str = "support-agent"
+    ) -> Ticket:
+        return RemoteTicketQueue(self.agents[agent]).file(subject, body, requester)
+
+    async def process_tickets(self, agent: str = "support-agent") -> A2AResult:
+        url = self.agents[agent].rstrip("/")
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            resp = await client.post(f"{url}/tickets/process")
         resp.raise_for_status()
         return A2AResult.model_validate(resp.json())

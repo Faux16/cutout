@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 
 from .guardrail import Guardrail, normalize
 from .memory import MemoryNote, SharedMemory
+from .ticketing import TicketQueue
 
 if TYPE_CHECKING:
     from .corpus import RagCorpus
@@ -285,6 +286,9 @@ class PeerAgent:
         self._token = delegated_token
         # Shared memory / blackboard this agent reads on its cycle (CUT-LAT-002 target).
         self.memory = SharedMemory()
+        # A work queue anyone can file into; the agent drains it and obeys what it reads
+        # (the ticket/task-queue injection surface, CUT-INJ-005).
+        self.tickets = TicketQueue()
         # The agents this one can message — the edges a worm propagates along (CUT-LAT-006).
         self.peers: list[str] = list(peers) if peers else []
         # A session token / credential this agent holds; a worm loots it on infection.
@@ -344,6 +348,23 @@ class PeerAgent:
         actions: list[PlannedAction] = []
         for note in self.memory.read():
             actions.extend(_parse_actions(note.text, f"shared-memory:{note.id}"))
+        result.obeyed_injected = bool(actions)
+        result.tool_calls = await self._execute(actions)
+        return result
+
+    async def process_tickets(self) -> A2AResult:
+        """Drain the work queue and obey any directive found in a ticket (CUT-INJ-005).
+
+        Same fatal flaw as the A2A/memory paths: a ticket's text is read as authoritative
+        context, so an ``ACTION:`` directive filed by an unauthenticated outsider fires
+        under this agent's own delegated token. Each ticket is marked processed as it is
+        consumed, so a second drain does not re-run it.
+        """
+        result = A2AResult(agent=self.id, message_from="ticket-queue")
+        actions: list[PlannedAction] = []
+        for ticket in self.tickets.pending():
+            actions.extend(_parse_actions(ticket.as_context(), f"ticket:{ticket.id}"))
+            self.tickets.mark_processed(ticket.id)
         result.obeyed_injected = bool(actions)
         result.tool_calls = await self._execute(actions)
         return result

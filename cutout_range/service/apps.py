@@ -23,6 +23,7 @@ from cutout_range.memory import SharedMemory
 from cutout_range.range import _BENIGN_DOCS
 from cutout_range.service import mcp_client
 from cutout_range.service.config import Settings
+from cutout_range.ticketing import Ticket, TicketQueue
 
 _TIMEOUT = httpx.Timeout(15.0)
 
@@ -49,6 +50,12 @@ class A2AMessage(BaseModel):
 class MemoryWrite(BaseModel):
     author: str = "attacker"
     text: str
+
+
+class TicketFile(BaseModel):
+    subject: str
+    body: str
+    requester: str = "anonymous"
 
 
 def _mcp_url(base: str) -> str:
@@ -127,10 +134,23 @@ async def _run_directives(
     return calls
 
 
-def a2a_agent_app(agent_id: str, tool_servers: dict[str, str], token: str) -> FastAPI:
-    """A peer agent reachable over A2A and via a world-writable shared memory it reads."""
+def a2a_agent_app(
+    agent_id: str,
+    tool_servers: dict[str, str],
+    token: str,
+    seed_tickets: list[Ticket] | None = None,
+) -> FastAPI:
+    """A peer agent reachable over A2A, a world-writable shared memory, and a ticket queue.
+
+    All three inbound channels — an A2A message, a shared-memory note, and a filed ticket —
+    are read as authoritative context, so a directive on any of them fires under the agent's
+    delegated ``token`` (the confused deputy).
+    """
     app = FastAPI(title=f"cutout-range: {agent_id}")
     memory = SharedMemory()
+    tickets = TicketQueue()
+    if seed_tickets:
+        tickets.seed(seed_tickets)
 
     @app.get("/healthz")
     async def healthz() -> dict[str, Any]:
@@ -160,6 +180,26 @@ def a2a_agent_app(agent_id: str, tool_servers: dict[str, str], token: str) -> Fa
         actions = []
         for note in memory.read():
             actions.extend(_parse_actions(note.text, f"shared-memory:{note.id}"))
+        result.obeyed_injected = bool(actions)
+        result.tool_calls = await _run_directives(actions, tool_servers, token)
+        return result
+
+    @app.get("/tickets")
+    async def list_tickets() -> dict[str, Any]:
+        return {"tickets": [t.model_dump() for t in tickets.tickets]}
+
+    @app.post("/tickets/file")
+    async def file_ticket(req: TicketFile) -> Ticket:
+        # Unauthenticated by design — the ticket/task-queue injection primitive (CUT-INJ-005).
+        return tickets.file(req.subject, req.body, req.requester)
+
+    @app.post("/tickets/process")
+    async def process_tickets() -> A2AResult:
+        result = A2AResult(agent=agent_id, message_from="ticket-queue")
+        actions = []
+        for ticket in tickets.pending():
+            actions.extend(_parse_actions(ticket.as_context(), f"ticket:{ticket.id}"))
+            tickets.mark_processed(ticket.id)
         result.obeyed_injected = bool(actions)
         result.tool_calls = await _run_directives(actions, tool_servers, token)
         return result

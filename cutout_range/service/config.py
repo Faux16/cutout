@@ -46,6 +46,9 @@ class Settings:
     billing_agent_url: str = field(
         default_factory=lambda: _env("CUTOUT_RANGE_BILLING_AGENT_URL", "http://127.0.0.1:8616")
     )
+    support_agent_url: str = field(
+        default_factory=lambda: _env("CUTOUT_RANGE_SUPPORT_AGENT_URL", "http://127.0.0.1:8617")
+    )
     state_dir: str | None = field(
         default_factory=lambda: os.environ.get("CUTOUT_RANGE_STATE_DIR") or None
     )
@@ -82,7 +85,10 @@ class Settings:
         return {
             "billing-agent": _env(
                 "CUTOUT_RANGE_ADVERTISE_BILLING_AGENT_URL", self.billing_agent_url
-            )
+            ),
+            "support-agent": _env(
+                "CUTOUT_RANGE_ADVERTISE_SUPPORT_AGENT_URL", self.support_agent_url
+            ),
         }
 
 
