@@ -414,11 +414,12 @@ techniques:
     status: implemented
   - id: CUT-LAT-003
     name: Shared-Queue / Message-Bus Pivot
+    alias: letterbox
     tactic: LAT
     layer: lateral
     targets: [orchestrator]
     desc: Pivot through a shared task queue or message bus.
-    status: planned
+    status: implemented
   - id: CUT-LAT-004
     name: Human-Relay Pivot
     tactic: LAT
