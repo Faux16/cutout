@@ -68,9 +68,9 @@ class SharedQueuePivot(BaseModule):
     async def check(self, session: Session) -> CheckResult:
         rng = connect_range(session.target)
         peers = list(getattr(rng, "agents", {}))
-        reachable = self.opts["to_agent"] in peers and rng.ticket_queue(
-            self.opts["to_agent"]
-        ).writable()
+        reachable = (
+            self.opts["to_agent"] in peers and rng.ticket_queue(self.opts["to_agent"]).writable()
+        )
         return CheckResult(
             module_id=self.id,
             susceptible=reachable,
