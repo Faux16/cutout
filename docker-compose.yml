@@ -6,9 +6,12 @@
 #   cutout run --target http://127.0.0.1:8600 CUT-EXEC-001    # exfils a live secret
 #   cutout run --target http://127.0.0.1:8600 CUT-PERS-001
 #
-# All five services share one network. Ports are published to the host so the attack
-# modules (running on the host) can reach both the orchestrator and — via /topology
-# discovery — the downstream tool servers and RAG corpus directly.
+# All services share one network. Ports are published to the host so the attack modules
+# (running on the host) can reach the orchestrator and — via /topology discovery — the
+# downstream tool servers, RAG corpus, and peer agents (billing, support) directly.
+#
+#   cutout run --target http://127.0.0.1:8600 CUT-INJ-005   # files a ticket to support-agent
+#   cutout run --target http://127.0.0.1:8600 CUT-EXEC-001 -o surface=tickets  # leaks a secret
 #
 # THIS STACK IS INTENTIONALLY INSECURE. Do not deploy it. See ETHICS.md.
 
@@ -53,11 +56,21 @@ services:
     environment:
       CUTOUT_RANGE_PAYMENTS_URL: http://payments:8615
 
+  # The customer-support agent: drains a world-writable ticket queue and obeys what it
+  # reads, under its own delegated token (the CUT-INJ-005 confused-deputy surface).
+  support-agent:
+    <<: *image
+    command: uvicorn cutout_range.service.servers.support_agent:app --host 0.0.0.0 --port 8617
+    ports: ["8617:8617"]
+    depends_on: [customer-data]
+    environment:
+      CUTOUT_RANGE_CUSTOMER_DATA_URL: http://customer-data:8611
+
   orchestrator:
     <<: *image
     command: uvicorn cutout_range.service.servers.orchestrator:app --host 0.0.0.0 --port 8600
     ports: ["8600:8600"]
-    depends_on: [customer-data, fs-tools, external-fetch, rag-corpus, billing-agent]
+    depends_on: [customer-data, fs-tools, external-fetch, rag-corpus, billing-agent, support-agent]
     environment:
       # Internal service-DNS URLs the orchestrator uses to reach peers.
       CUTOUT_RANGE_CUSTOMER_DATA_URL: http://customer-data:8611
@@ -65,9 +78,11 @@ services:
       CUTOUT_RANGE_EXTERNAL_FETCH_URL: http://external-fetch:8613
       CUTOUT_RANGE_RAG_CORPUS_URL: http://rag-corpus:8614
       CUTOUT_RANGE_BILLING_AGENT_URL: http://billing-agent:8616
+      CUTOUT_RANGE_SUPPORT_AGENT_URL: http://support-agent:8617
       # Host-reachable URLs advertised to the attacker via /topology.
       CUTOUT_RANGE_ADVERTISE_CUSTOMER_DATA_URL: http://127.0.0.1:8611
       CUTOUT_RANGE_ADVERTISE_FS_TOOLS_URL: http://127.0.0.1:8612
       CUTOUT_RANGE_ADVERTISE_EXTERNAL_FETCH_URL: http://127.0.0.1:8613
       CUTOUT_RANGE_ADVERTISE_RAG_CORPUS_URL: http://127.0.0.1:8614
       CUTOUT_RANGE_ADVERTISE_BILLING_AGENT_URL: http://127.0.0.1:8616
+      CUTOUT_RANGE_ADVERTISE_SUPPORT_AGENT_URL: http://127.0.0.1:8617

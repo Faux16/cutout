@@ -118,11 +118,12 @@ techniques:
     status: planned
   - id: CUT-INJ-005
     name: Task-Queue / Ticket / Email Injection
+    alias: walkin
     tactic: INJ
     layer: delivery
     targets: [orchestrator, tool]
     desc: Payload in a ticket, email, or work item the agent processes.
-    status: planned
+    status: implemented
   - id: CUT-INJ-006
     name: Tool-Description Injection
     tactic: INJ
@@ -413,11 +414,12 @@ techniques:
     status: implemented
   - id: CUT-LAT-003
     name: Shared-Queue / Message-Bus Pivot
+    alias: letterbox
     tactic: LAT
     layer: lateral
     targets: [orchestrator]
     desc: Pivot through a shared task queue or message bus.
-    status: planned
+    status: implemented
   - id: CUT-LAT-004
     name: Human-Relay Pivot
     tactic: LAT
