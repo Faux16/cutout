@@ -197,3 +197,14 @@ class McpTarget:
 
     async def process_memory(self, to_agent: str) -> A2AResult:
         raise RuntimeError(_ONLY_RECON)
+
+    def ticket_queue(self, agent: str = "support-agent") -> Any:
+        raise RuntimeError(_ONLY_RECON)
+
+    def file_ticket(
+        self, subject: str, body: str, requester: str = "anonymous", *, agent: str = "support-agent"
+    ) -> Any:
+        raise RuntimeError(_ONLY_RECON)
+
+    async def process_tickets(self, agent: str = "support-agent") -> A2AResult:
+        raise RuntimeError(_ONLY_RECON)

@@ -21,7 +21,10 @@ from .agent import A2AResult, OrchestratorResult
 from .corpus import Document
 from .hosts import HostInfo
 from .memory import MemoryNote
+from .ticketing import Ticket, TicketQueue
 from .tool_servers import ToolSpec
+
+_NO_TICKETS = "ticket queue not exposed over the networked range yet (in-process range only)"
 
 _TIMEOUT = httpx.Timeout(15.0)
 
@@ -160,3 +163,15 @@ class RemoteRange:
             resp = await client.post(f"{url}/memory/process")
         resp.raise_for_status()
         return A2AResult.model_validate(resp.json())
+
+    # ---- ticket queue: in-process range only (no networked service yet) ----
+    def ticket_queue(self, agent: str = "support-agent") -> TicketQueue:
+        raise NotImplementedError(_NO_TICKETS)
+
+    def file_ticket(
+        self, subject: str, body: str, requester: str = "anonymous", *, agent: str = "support-agent"
+    ) -> Ticket:
+        raise NotImplementedError(_NO_TICKETS)
+
+    async def process_tickets(self, agent: str = "support-agent") -> A2AResult:
+        raise NotImplementedError(_NO_TICKETS)

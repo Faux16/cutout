@@ -121,6 +121,17 @@ class ChatTarget:
     async def process_memory(self, to_agent: str) -> A2AResult:
         raise RuntimeError(_NOT_A_RANGE)
 
+    def ticket_queue(self, agent: str = "support-agent") -> Any:
+        raise RuntimeError(_NOT_A_RANGE)
+
+    def file_ticket(
+        self, subject: str, body: str, requester: str = "anonymous", *, agent: str = "support-agent"
+    ) -> Any:
+        raise RuntimeError(_NOT_A_RANGE)
+
+    async def process_tickets(self, agent: str = "support-agent") -> A2AResult:
+        raise RuntimeError(_NOT_A_RANGE)
+
     def _extract(self, resp: httpx.Response) -> str:
         try:
             data = resp.json()
