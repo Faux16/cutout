@@ -122,7 +122,18 @@ techniques:
     tactic: INJ
     layer: delivery
     targets: [orchestrator, tool]
-    desc: Payload in a ticket, email, or work item the agent processes.
+    desc: >-
+      Payload in a ticket, email, or work item the agent processes: an unauthenticated
+      outsider files a work item whose text the agent reads as authoritative context, so an
+      embedded directive fires under the agent's own delegated token. Detection: flag
+      directive-shaped content in queued items (imperative tool verbs, embedded tool names,
+      "ignore previous"/policy-override phrasing) and alert when draining a ticket leads to a
+      sensitive tool call — or to any tool the item's requester could not invoke directly;
+      stamp the originating item id on every downstream call so the provenance is auditable.
+      Mitigation: keep a hard data/instruction trust boundary — treat a filed item as data to
+      summarize, never as instructions to plan tool calls from; gate any privileged action a
+      ticket triggers on human approval or the requester's own authorization; scope the
+      draining agent's credential to the minimum its legitimate work needs.
     status: implemented
   - id: CUT-INJ-006
     name: Tool-Description Injection
@@ -418,7 +429,17 @@ techniques:
     tactic: LAT
     layer: lateral
     targets: [orchestrator]
-    desc: Pivot through a shared task queue or message bus.
+    desc: >-
+      Pivot through a shared task queue or message bus: reach a peer agent by dropping a work
+      item into a queue it drains on its own cycle, so the pivot needs no direct message and
+      no credential — the servicing agent executes under its own token. Detection: correlate a
+      queue enqueue originating in one trust zone with a privileged tool call in another;
+      alert on cross-zone provenance (a call whose source is a queue item authored outside the
+      servicing agent's zone); baseline each agent's normal queue-driven tool calls and flag
+      deviations. Mitigation: authenticate and attribute each queue item to a principal and
+      carry that identity through to authorization at the tool call, so a queued item never
+      confers the draining agent's privileges; segment queues by trust zone and rate-limit
+      cross-zone enqueues.
     status: implemented
   - id: CUT-LAT-004
     name: Human-Relay Pivot
