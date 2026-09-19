@@ -33,3 +33,6 @@ runs/
 
 # uv
 uv.lock
+
+# OSS-hunt survey working dir (target lists, reports, findings — never publish)
+study/
