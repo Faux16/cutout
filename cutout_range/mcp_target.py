@@ -208,3 +208,9 @@ class McpTarget:
 
     async def process_tickets(self, agent: str = "support-agent") -> A2AResult:
         raise RuntimeError(_ONLY_RECON)
+
+    def rugpull_armed(self) -> bool:
+        raise RuntimeError(_ONLY_RECON)
+
+    def arm_rugpull(self) -> None:
+        raise RuntimeError(_ONLY_RECON)
