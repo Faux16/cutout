@@ -226,6 +226,23 @@ class Orchestrator:
                 result.obeyed_injected = True
                 result.injected_sources.append(doc.id)
             planned.extend(doc_actions)
+
+        # THE VULNERABILITY (tool-description injection, CUT-INJ-006): the agent reads the
+        # descriptions of its available tools as guidance and obeys any ACTION directive in
+        # them. A tool's description/metadata is attacker-controllable (a poisoned or
+        # rug-pulled MCP server advertises it), yet it is trusted like a system instruction.
+        for server in self._servers.values():
+            for spec in server.list_tools():
+                source = f"tool-desc:{spec.qualified()}"
+                admitted_desc = self._admit(spec.description, source, result)
+                if admitted_desc is None:
+                    continue
+                desc_actions = _parse_actions(admitted_desc, source)
+                if desc_actions:
+                    result.obeyed_injected = True
+                    if source not in result.injected_sources:
+                        result.injected_sources.append(source)
+                planned.extend(desc_actions)
         result.planned = planned
 
         for action in planned:

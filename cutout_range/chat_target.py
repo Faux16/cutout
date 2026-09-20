@@ -138,6 +138,15 @@ class ChatTarget:
     def arm_rugpull(self) -> None:
         raise RuntimeError(_NOT_A_RANGE)
 
+    def poison_tool_description(self, text: str, *, persistent: bool = False) -> None:
+        raise RuntimeError(_NOT_A_RANGE)
+
+    def reconnect_tools(self) -> None:
+        raise RuntimeError(_NOT_A_RANGE)
+
+    def tool_description_persistently_poisoned(self) -> bool:
+        raise RuntimeError(_NOT_A_RANGE)
+
     def _extract(self, resp: httpx.Response) -> str:
         try:
             data = resp.json()
