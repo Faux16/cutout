@@ -137,11 +137,22 @@ techniques:
     status: implemented
   - id: CUT-INJ-006
     name: Tool-Description Injection
+    alias: legend
     tactic: INJ
     layer: delivery
     targets: [mcp]
-    desc: Malicious instructions embedded in an MCP tool's description/metadata.
-    status: planned
+    desc: >-
+      Malicious instructions embedded in an MCP tool's description/metadata: the agent reads
+      tool descriptions as authoritative guidance, so a directive supplied by a malicious or
+      compromised server is obeyed like a system instruction and coerces a call. Detection:
+      diff tool descriptions against a trusted baseline and flag changes; scan tool metadata
+      for imperative/instruction-shaped content (tool verbs, "always/first/before answering",
+      policy phrasing) at connect time; attribute a coerced call back to the description that
+      carried it. Mitigation: treat tool metadata as untrusted data, not instructions — never
+      let a description contribute to the plan; render descriptions inert (strip/escape
+      directive syntax) before they enter the model's context; pin and review tool schemas
+      from third-party servers.
+    status: implemented
   - id: CUT-INJ-007
     name: Multimodal Injection
     tactic: INJ
@@ -227,11 +238,21 @@ techniques:
     status: implemented
   - id: CUT-PERS-004
     name: Persistent Tool-Description Poison
+    alias: deepcover
     tactic: PERS
     layer: persistence
     targets: [mcp]
-    desc: Durable malicious MCP tool metadata surviving reconnection.
-    status: planned
+    desc: >-
+      Durable malicious MCP tool metadata surviving reconnection: the poisoned description
+      persists server-side, so every fresh session re-fetches it and the coercion re-arms
+      with no re-delivery — the durable form of CUT-INJ-006. Detection: re-verify tool
+      descriptions against a pinned baseline on every (re)connect, not just first approval;
+      alert when a server's advertised metadata changes between sessions; watch for the same
+      description-sourced coercion recurring across sessions. Mitigation: pin and hash tool
+      schemas and refuse silent metadata changes; re-review third-party tool definitions on
+      reconnect; render descriptions inert before they reach the model, and least-privilege
+      the agent so a re-armed directive cannot reach secrets.
+    status: implemented
   - id: CUT-PERS-005
     name: Scheduled-Task Implant
     tactic: PERS

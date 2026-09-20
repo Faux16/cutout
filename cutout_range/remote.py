@@ -25,6 +25,7 @@ from .ticketing import Ticket
 from .tool_servers import ToolSpec
 
 _NO_RUGPULL = "rug-pull tool not exposed over the networked range yet (in-process range only)"
+_NO_TOOLDESC = "tool-description poison not exposed over the networked range yet (in-process only)"
 
 _TIMEOUT = httpx.Timeout(15.0)
 
@@ -217,3 +218,13 @@ class RemoteRange:
 
     def arm_rugpull(self) -> None:
         raise NotImplementedError(_NO_RUGPULL)
+
+    # ---- tool-description poison: in-process range only ---------------------
+    def poison_tool_description(self, text: str, *, persistent: bool = False) -> None:
+        raise NotImplementedError(_NO_TOOLDESC)
+
+    def reconnect_tools(self) -> None:
+        raise NotImplementedError(_NO_TOOLDESC)
+
+    def tool_description_persistently_poisoned(self) -> bool:
+        raise NotImplementedError(_NO_TOOLDESC)

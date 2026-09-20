@@ -214,3 +214,12 @@ class McpTarget:
 
     def arm_rugpull(self) -> None:
         raise RuntimeError(_ONLY_RECON)
+
+    def poison_tool_description(self, text: str, *, persistent: bool = False) -> None:
+        raise RuntimeError(_ONLY_RECON)
+
+    def reconnect_tools(self) -> None:
+        raise RuntimeError(_ONLY_RECON)
+
+    def tool_description_persistently_poisoned(self) -> bool:
+        raise RuntimeError(_ONLY_RECON)
