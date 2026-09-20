@@ -24,6 +24,8 @@ from .memory import MemoryNote
 from .ticketing import Ticket
 from .tool_servers import ToolSpec
 
+_NO_RUGPULL = "rug-pull tool not exposed over the networked range yet (in-process range only)"
+
 _TIMEOUT = httpx.Timeout(15.0)
 
 
@@ -208,3 +210,10 @@ class RemoteRange:
             resp = await client.post(f"{url}/tickets/process")
         resp.raise_for_status()
         return A2AResult.model_validate(resp.json())
+
+    # ---- rug-pull tool: in-process range only (no networked service yet) ----
+    def rugpull_armed(self) -> bool:
+        raise NotImplementedError(_NO_RUGPULL)
+
+    def arm_rugpull(self) -> None:
+        raise NotImplementedError(_NO_RUGPULL)

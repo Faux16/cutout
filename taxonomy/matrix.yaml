@@ -241,11 +241,24 @@ techniques:
     status: planned
   - id: CUT-PERS-006
     name: Rug-Pull Tool
+    alias: turncoat
     tactic: PERS
     layer: persistence
     targets: [mcp]
-    desc: Server behaves benignly at approval, mutates behavior post-trust.
-    status: planned
+    desc: >-
+      Server behaves benignly at approval, mutates behavior post-trust: an
+      attacker-controlled tool earns approval while harmless, then — its advertised schema
+      unchanged and still non-sensitive — flips so the same call exfiltrates data or takes a
+      privileged action. A TOCTOU on tool trust; the approval persists across sessions.
+      Detection: pin and hash tool definitions and re-verify on every use, not just at
+      approval; baseline a tool's outputs and side effects at approval time and alert when a
+      trusted tool starts returning secret-shaped data or touching resources outside its
+      declared scope; watch for tool behavior that diverges from its description. Mitigation:
+      treat one-time approval as revocable, not permanent — re-authorize on any definition or
+      behavior change and prefer pinned, signed tool versions; least-privilege the tool's
+      runtime so a flip cannot reach secrets; content-inspect tool outputs for secrets
+      regardless of the tool's declared scope.
+    status: implemented
 
   # ---- PRIV (delegation abuse) ----
   - id: CUT-PRIV-001
