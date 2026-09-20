@@ -38,11 +38,22 @@ techniques:
     status: implemented
   - id: CUT-RECON-002
     name: Agent Topology Mapping
+    alias: cartograph
     tactic: RECON
     layer: recon
     targets: [a2a, orchestrator]
-    desc: Discover downstream/sub-agents and A2A peers; build the relay graph.
-    status: planned
+    desc: >-
+      Discover downstream/sub-agents and A2A peers and build the relay graph, then classify
+      each node as a source (attacker-writable ingress), a pivot (an agent that carries a
+      credential and bridges trust zones), or a sink (a sensitive or egress tool), and
+      enumerate the source-to-sink attack paths — annotating each with the CTX technique that
+      executes it. Detection: this is attacker recon, so the signal is the enumeration itself
+      — broad tool/agent/metadata listing from one principal, cross-agent probing, repeated
+      A2A discovery; alert on reconnaissance breadth, not any single call. Mitigation: reduce
+      what one principal can enumerate (scope tool/agent visibility per role), segment trust
+      zones so the source->sink graph has fewer edges, and require attribution on A2A so the
+      mesh cannot be walked anonymously.
+    status: implemented
   - id: CUT-RECON-003
     name: System-Prompt / Instruction Extraction
     tactic: RECON
