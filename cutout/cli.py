@@ -8,6 +8,7 @@ Commands:
     hunt --targets <file>    batch survey: hunt many servers, print a coverage table
     replay <transcript>      re-render a past run's evidence events
     catalog [path]           show catalog coverage (implemented vs planned)
+    paths                    map the topology and enumerate source->sink attack paths
 """
 
 from __future__ import annotations
@@ -567,6 +568,86 @@ def catalog(
         table.add_row(entry.id, entry.name, entry.tactic, status)
     console.print(table)
     console.print(f"[dim]{implemented}/{len(entries)} implemented.[/dim]")
+
+
+async def _map_paths(target: str | None) -> ModuleResult:
+    """Run the topology mapper (CUT-RECON-002) read-only — no transcript written."""
+    session = Session(target=TargetDescriptor(uri=target)) if target else Session()
+    return await Engine(session=session).run("CUT-RECON-002")
+
+
+def _render_hops(hops: list[str], roles: dict[str, str]) -> str:
+    """Colorize a source -> ... -> sink path by node role."""
+    style = {"source": "yellow", "pivot": "cyan", "sink": "bold red"}
+    parts = [f"[{style.get(roles.get(n, 'pivot'), 'white')}]{n}[/]" for n in hops]
+    return " [dim]→[/dim] ".join(parts)
+
+
+@app.command("paths")
+def paths(
+    target: str | None = typer.Option(
+        None, "--target", help="Same target syntax as 'run'; omit for a fresh in-memory range."
+    ),
+    source: str | None = typer.Option(None, "--source", help="Only paths whose source matches."),
+    sink: str | None = typer.Option(None, "--sink", help="Only paths whose sink matches."),
+    technique: str | None = typer.Option(
+        None, "--technique", "-t", help="Only paths tagged with this CTX id/alias."
+    ),
+    limit: int = typer.Option(40, "--limit", help="Max paths to show."),
+) -> None:
+    """Map the target's agent topology and enumerate source→sink attack paths (CUT-RECON-002)."""
+    try:
+        result = asyncio.run(_map_paths(target))
+    except (CutoutError, OptionError) as exc:
+        err_console.print(f"[red]error:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+    except Exception as exc:
+        err_console.print(f"[red]error:[/red] {type(exc).__name__}: {exc}")
+        if target:
+            err_console.print(f"[dim]could not reach target {target}; is it up?[/dim]")
+        raise typer.Exit(code=1) from exc
+
+    data = result.data
+    sources, sinks, pivots = data["sources"], data["sinks"], data["pivots"]
+    roles = dict.fromkeys(sources, "source")
+    roles.update(dict.fromkeys(pivots, "pivot"))
+    roles.update(dict.fromkeys(sinks, "sink"))
+    all_paths = list(data["attack_paths"])
+
+    shown = all_paths
+    if source:
+        shown = [p for p in shown if source.lower() in str(p["source"]).lower()]
+    if sink:
+        shown = [p for p in shown if sink.lower() in str(p["sink"]).lower()]
+    if technique:
+        shown = [p for p in shown if any(technique.lower() in t.lower() for t in p["techniques"])]
+    shown = sorted(shown, key=lambda p: (p["length"], p["source"], p["sink"]))
+
+    console.print(
+        Panel(
+            f"[yellow]{len(sources)} source(s)[/yellow]  ·  [cyan]{len(pivots)} pivot(s)[/cyan]"
+            f"  ·  [bold red]{len(sinks)} sink(s)[/bold red]  ·  {len(all_paths)} attack path(s)\n"
+            f"[dim]source = attacker-writable ingress · pivot = credential-carrying agent · "
+            f"sink = sensitive/egress tool[/dim]",
+            title="agent topology",
+            expand=False,
+        )
+    )
+
+    table = Table(title=f"Attack paths{' (filtered)' if len(shown) != len(all_paths) else ''}")
+    table.add_column("#", justify="right", style="dim")
+    table.add_column("Path (source → sink)")
+    table.add_column("Executes", style="green")
+    for i, p in enumerate(shown[:limit], start=1):
+        table.add_row(str(i), _render_hops(list(p["hops"]), roles), ", ".join(p["techniques"]))
+    console.print(table)
+
+    hidden = max(0, len(shown) - limit)
+    tail = f" ({hidden} more; raise --limit)" if hidden else ""
+    console.print(
+        f"[dim]{len(shown)} of {len(all_paths)} path(s){tail}. "
+        f"Each 'Executes' tag is a runnable module — e.g. 'cutout run walkin'.[/dim]"
+    )
 
 
 @app.command("canary")
