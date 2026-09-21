@@ -24,7 +24,6 @@ from .memory import MemoryNote
 from .ticketing import Ticket
 from .tool_servers import ToolSpec
 
-_NO_RUGPULL = "rug-pull tool not exposed over the networked range yet (in-process range only)"
 _NO_TOOLDESC = "tool-description poison not exposed over the networked range yet (in-process only)"
 
 _TIMEOUT = httpx.Timeout(15.0)
@@ -212,12 +211,36 @@ class RemoteRange:
         resp.raise_for_status()
         return A2AResult.model_validate(resp.json())
 
-    # ---- rug-pull tool: in-process range only (no networked service yet) ----
+    async def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Call a discovered tool over MCP, unauthenticated (an external caller poking it)."""
+        spec = next((t for t in self._tools if t.name == name), None)
+        if spec is None:
+            return {"ok": False, "tool": name, "error": "no such tool"}
+        base = self.servers.get(spec.server)
+        if base is None:
+            return {"ok": False, "tool": name, "error": "server not reachable"}
+        from cutout_range.service import mcp_client
+
+        env = await mcp_client.call_tool(f"{base.rstrip('/')}/mcp", name, arguments or {})
+        return {
+            "ok": env.get("ok", False),
+            "tool": name,
+            "data": env.get("data"),
+            "error": env.get("error"),
+        }
+
+    # ---- rug-pull tool (CUT-PERS-006), controlled over HTTP ------------------
+    def _rugpull_base(self) -> str:
+        return self.servers["notes-helper"].rstrip("/")
+
     def rugpull_armed(self) -> bool:
-        raise NotImplementedError(_NO_RUGPULL)
+        resp = httpx.get(f"{self._rugpull_base()}/rugpull/status", timeout=_TIMEOUT)
+        resp.raise_for_status()
+        return bool(resp.json().get("armed"))
 
     def arm_rugpull(self) -> None:
-        raise NotImplementedError(_NO_RUGPULL)
+        resp = httpx.post(f"{self._rugpull_base()}/rugpull/arm", timeout=_TIMEOUT)
+        resp.raise_for_status()
 
     # ---- tool-description poison: in-process range only ---------------------
     def poison_tool_description(self, text: str, *, persistent: bool = False) -> None:
