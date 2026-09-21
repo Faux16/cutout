@@ -49,6 +49,13 @@ services:
     command: uvicorn cutout_range.service.servers.rugpull:app --host 0.0.0.0 --port 8618
     ports: ["8618:8618"]
 
+  # directory: a benign lookup tool whose advertised description the attacker poisons via
+  # /tooldesc/poison — tool-description injection (CUT-INJ-006), persistent variant PERS-004.
+  directory:
+    <<: *image
+    command: uvicorn cutout_range.service.servers.directory:app --host 0.0.0.0 --port 8619
+    ports: ["8619:8619"]
+
   # payments is deliberately NOT host-published: it lives in the billing-agent's trust
   # zone and is reachable only by pivoting through the billing-agent (CUT-LAT-001).
   payments:
@@ -78,7 +85,14 @@ services:
     command: uvicorn cutout_range.service.servers.orchestrator:app --host 0.0.0.0 --port 8600
     ports: ["8600:8600"]
     depends_on:
-      [customer-data, fs-tools, external-fetch, rag-corpus, billing-agent, support-agent, notes-helper]
+      - customer-data
+      - fs-tools
+      - external-fetch
+      - rag-corpus
+      - billing-agent
+      - support-agent
+      - notes-helper
+      - directory
     environment:
       # Internal service-DNS URLs the orchestrator uses to reach peers.
       CUTOUT_RANGE_CUSTOMER_DATA_URL: http://customer-data:8611
@@ -86,6 +100,7 @@ services:
       CUTOUT_RANGE_EXTERNAL_FETCH_URL: http://external-fetch:8613
       CUTOUT_RANGE_RAG_CORPUS_URL: http://rag-corpus:8614
       CUTOUT_RANGE_RUGPULL_URL: http://notes-helper:8618
+      CUTOUT_RANGE_DIRECTORY_URL: http://directory:8619
       CUTOUT_RANGE_BILLING_AGENT_URL: http://billing-agent:8616
       CUTOUT_RANGE_SUPPORT_AGENT_URL: http://support-agent:8617
       # Host-reachable URLs advertised to the attacker via /topology.
@@ -94,5 +109,6 @@ services:
       CUTOUT_RANGE_ADVERTISE_EXTERNAL_FETCH_URL: http://127.0.0.1:8613
       CUTOUT_RANGE_ADVERTISE_RAG_CORPUS_URL: http://127.0.0.1:8614
       CUTOUT_RANGE_ADVERTISE_RUGPULL_URL: http://127.0.0.1:8618
+      CUTOUT_RANGE_ADVERTISE_DIRECTORY_URL: http://127.0.0.1:8619
       CUTOUT_RANGE_ADVERTISE_BILLING_AGENT_URL: http://127.0.0.1:8616
       CUTOUT_RANGE_ADVERTISE_SUPPORT_AGENT_URL: http://127.0.0.1:8617
