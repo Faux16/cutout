@@ -37,6 +37,9 @@ class Settings:
     external_fetch_url: str = field(
         default_factory=lambda: _env("CUTOUT_RANGE_EXTERNAL_FETCH_URL", "http://127.0.0.1:8613")
     )
+    rugpull_url: str = field(
+        default_factory=lambda: _env("CUTOUT_RANGE_RUGPULL_URL", "http://127.0.0.1:8618")
+    )
     rag_corpus_url: str = field(
         default_factory=lambda: _env("CUTOUT_RANGE_RAG_CORPUS_URL", "http://127.0.0.1:8614")
     )
@@ -60,6 +63,7 @@ class Settings:
             "customer-data": self.customer_data_url,
             "fs-tools": self.fs_tools_url,
             "external-fetch": self.external_fetch_url,
+            "notes-helper": self.rugpull_url,
         }
 
     # Advertised (what /topology hands a client); default to internal.
@@ -73,6 +77,7 @@ class Settings:
             "external-fetch": _env(
                 "CUTOUT_RANGE_ADVERTISE_EXTERNAL_FETCH_URL", self.external_fetch_url
             ),
+            "notes-helper": _env("CUTOUT_RANGE_ADVERTISE_RUGPULL_URL", self.rugpull_url),
         }
 
     @property
