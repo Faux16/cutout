@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from .agent import A2AResult, InfectionEvent, Orchestrator, PeerAgent, WormReport
+from .approval import ApprovalDecision, HumanApprover
 from .chat_target import MockChatAgent
 from .corpus import Document, RagCorpus
 from .guardrail import Guardrail, default_guardrail
@@ -155,6 +156,10 @@ class Range:
         # prompt-injection (CUT-INJ-001), the same interface a real ChatTarget exposes.
         self.chat_agent = MockChatAgent()
 
+        # A human-in-the-loop approval gate over sensitive actions. The naive human reads the
+        # justification and approves what looks legitimate — the CUT-PRIV-003 surface.
+        self.human_approver = HumanApprover()
+
     def list_tools(self) -> list[ToolSpec]:
         specs: list[ToolSpec] = []
         for server in self.servers.values():
@@ -267,6 +272,53 @@ class Range:
             return {"ok": False, "tool": name, "error": "no such tool"}
         result = await self.servers[server_id].call(name, arguments or {}, credential=None)
         out: dict[str, Any] = {"ok": result.ok, "tool": name}
+        if result.data is not None:
+            out["data"] = result.data
+        if result.error:
+            out["error"] = result.error
+        return out
+
+    async def request_approval(
+        self,
+        tool: str,
+        arguments: dict[str, Any] | None = None,
+        *,
+        justification: str = "",
+        oob_token: str | None = None,
+    ) -> dict[str, Any]:
+        """Ask the human to approve a sensitive action, then execute it only if they say yes.
+
+        The HITL gate: a sensitive tool runs only behind a human's approval, and the human
+        decides from the ``justification`` presented alongside the request. Because that
+        rationale is attacker-influenceable, a farmed justification manufactures the yes
+        (CUT-PRIV-003). An approved action executes under the orchestrator's delegated token,
+        exactly as it would after a real operator clicks approve.
+        """
+        server_id = self.tool_index.get(tool)
+        if server_id is None:
+            return {"ok": False, "tool": tool, "approved": False, "error": "no such tool"}
+        spec = next((s for s in self.servers[server_id].list_tools() if s.name == tool), None)
+        sensitive = bool(spec and spec.sensitive)
+        decision: ApprovalDecision = self.human_approver.review(
+            tool, justification, sensitive=sensitive, oob_token=oob_token
+        )
+        out: dict[str, Any] = {
+            "tool": tool,
+            "approved": decision.approved,
+            "matched_cues": decision.matched_cues,
+            "decision_reason": decision.reason,
+            "executed": False,
+            "ok": False,
+        }
+        if not decision.approved:
+            out["error"] = f"denied by human: {decision.reason}"
+            return out
+        # Approved: the action fires under the delegated token, as it would post-approval.
+        result = await self.servers[server_id].call(
+            tool, arguments or {}, credential=DELEGATED_TOKEN
+        )
+        out["executed"] = True
+        out["ok"] = result.ok
         if result.data is not None:
             out["data"] = result.data
         if result.error:
