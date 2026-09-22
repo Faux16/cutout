@@ -323,11 +323,19 @@ techniques:
     status: implemented
   - id: CUT-PRIV-003
     name: Approval Farming (HITL)
+    alias: nod
     tactic: PRIV
     layer: lateral
     targets: [human]
-    desc: Manipulate the human-in-the-loop into approving a malicious action.
-    status: planned
+    desc: >-
+      Defeat a working human-in-the-loop gate by farming the operator's approval rather than
+      removing the gate. The human anchors on the justification presented with the action, so
+      an attacker-controlled rationale stacking authority, routine, and urgency cues wins a yes
+      the honest request would be denied. Refused-when-honest vs approved-when-farmed, for the
+      same action, is the finding. Mitigation: show the approver the action and its risk, not
+      the agent's free text; require out-of-band or second-approver sign-off for crown-jewel
+      actions; flag social-engineering cue patterns and counter approval fatigue.
+    status: implemented
   - id: CUT-PRIV-004
     name: Cross-Agent Trust Exploitation
     tactic: PRIV

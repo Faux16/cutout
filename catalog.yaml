@@ -89,6 +89,10 @@ techniques:
     name: Delegated-Token Abuse
     tactic: PRIV
     targets: [tool, mcp]
+  - id: CUT-PRIV-003
+    name: Approval Farming (HITL)
+    tactic: PRIV
+    targets: [human]
   - id: CUT-LAT-006
     name: Self-Propagating Agent Worm
     tactic: LAT

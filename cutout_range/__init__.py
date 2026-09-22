@@ -18,6 +18,7 @@ See ETHICS.md. Do not deploy any part of this package.
 from __future__ import annotations
 
 from .agent import Orchestrator, OrchestratorResult
+from .approval import ApprovalDecision, HumanApprover
 from .chat_target import ChatReply, ChatTarget, MockChatAgent
 from .corpus import Document, RagCorpus
 from .guardrail import (
@@ -35,12 +36,14 @@ from .range import Range, connect_range, get_range, reset_ranges
 from .tool_servers import ToolResult, ToolServer, ToolSpec
 
 __all__ = [
+    "ApprovalDecision",
     "ChatReply",
     "ChatTarget",
     "Document",
     "Guardrail",
     "GuardrailVerdict",
     "HostInfo",
+    "HumanApprover",
     "McpTarget",
     "MockChatAgent",
     "Orchestrator",
