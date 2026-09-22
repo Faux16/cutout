@@ -36,3 +36,7 @@ uv.lock
 
 # OSS-hunt survey working dir (target lists, reports, findings — never publish)
 study/
+FINDING-*.md
+poc-tunnel-client/
+poc-codex/
+FINDING-advisory-drafts/
