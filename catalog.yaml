@@ -93,6 +93,10 @@ techniques:
     name: Approval Farming (HITL)
     tactic: PRIV
     targets: [human]
+  - id: CUT-PRIV-004
+    name: Cross-Agent Trust Exploitation
+    tactic: PRIV
+    targets: [a2a]
   - id: CUT-LAT-006
     name: Self-Propagating Agent Worm
     tactic: LAT
