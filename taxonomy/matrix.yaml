@@ -338,11 +338,19 @@ techniques:
     status: implemented
   - id: CUT-PRIV-004
     name: Cross-Agent Trust Exploitation
+    alias: vouch
     tactic: PRIV
     layer: lateral
     targets: [a2a]
-    desc: Leverage a more-privileged downstream agent's trust in the caller.
-    status: planned
+    desc: >-
+      Leverage a more-privileged downstream agent's trust in the caller. The agent authorizes
+      a privileged A2A request on the immediate caller's identity, not the true origin, so an
+      untrusted request is laundered into a privileged one by relaying it through a trusted
+      peer — a foothold on any trusted peer inherits the downstream's privilege. Refused-when-
+      direct vs granted-when-relayed, for the same action, is the finding. Mitigation:
+      authorize against a signed origin/scope carried through every hop, never on inter-agent
+      identity alone, and least-privilege the trust graph.
+    status: implemented
   - id: CUT-PRIV-005
     name: Privileged Sub-Agent Spawning
     tactic: PRIV

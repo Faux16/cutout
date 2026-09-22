@@ -296,6 +296,7 @@ class PeerAgent:
         delegated_token: str,
         peers: list[str] | None = None,
         local_secret: str | None = None,
+        trusts: list[str] | None = None,
     ) -> None:
         self.id = agent_id
         self._servers = servers
@@ -308,6 +309,11 @@ class PeerAgent:
         self.tickets = TicketQueue()
         # The agents this one can message — the edges a worm propagates along (CUT-LAT-006).
         self.peers: list[str] = list(peers) if peers else []
+        # Inbound trust: which callers may drive this agent's PRIVILEGED (sensitive) tools
+        # over A2A. Distinct from ``peers`` (who it can message outbound). The agent
+        # authorizes on the immediate caller's identity, not the request's true origin — so a
+        # foothold on any trusted peer inherits this agent's privilege (CUT-PRIV-004).
+        self.trusts: set[str] = set(trusts) if trusts else set()
         # A session token / credential this agent holds; a worm loots it on infection.
         self.local_secret: str | None = local_secret
         # Which worm has already infected this agent — the guard that makes a cyclic mesh
@@ -348,11 +354,36 @@ class PeerAgent:
             specs.extend(server.list_tools())
         return specs
 
+    def _sensitive(self, tool: str) -> bool:
+        """Whether ``tool`` (bare or ``server.tool``) is a privileged action."""
+        name = tool.split(".", 1)[1] if "." in tool else tool
+        return any(spec.name == name and spec.sensitive for spec in self.list_tools())
+
     async def receive(self, message_from: str, text: str) -> A2AResult:
         result = A2AResult(agent=self.id, message_from=message_from)
         actions = _parse_actions(text, f"a2a:{message_from}")
         result.obeyed_injected = bool(actions)
-        result.tool_calls = await self._execute(actions)
+        # Cross-agent trust: a PRIVILEGED action runs only for a caller this agent trusts.
+        # The check is on the immediate caller's identity, never the true origin — so a
+        # request relayed through a trusted peer is honored even when it began untrusted
+        # (CUT-PRIV-004). Non-sensitive actions are open to any caller.
+        trusted = message_from in self.trusts
+        allowed: list[PlannedAction] = []
+        refused: list[dict[str, Any]] = []
+        for action in actions:
+            if self._sensitive(action.tool) and not trusted:
+                refused.append(
+                    {
+                        "tool": action.tool,
+                        "args": action.args,
+                        "source": action.source,
+                        "ok": False,
+                        "error": f"untrusted caller '{message_from}' for a privileged action",
+                    }
+                )
+            else:
+                allowed.append(action)
+        result.tool_calls = await self._execute(allowed) + refused
         return result
 
     def write_memory(self, author: str, text: str) -> MemoryNote:
