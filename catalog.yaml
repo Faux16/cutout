@@ -85,6 +85,10 @@ techniques:
     name: Scope Escalation via Chaining
     tactic: PRIV
     targets: [tool]
+  - id: CUT-PRIV-001
+    name: Delegated-Token Abuse
+    tactic: PRIV
+    targets: [tool, mcp]
   - id: CUT-LAT-006
     name: Self-Propagating Agent Worm
     tactic: LAT

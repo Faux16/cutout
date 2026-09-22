@@ -140,10 +140,11 @@ not `use CUT-EXEC-001` (the ID stays canonical; the alias is the ergonomic handl
 | `siphon` | `CUT-EXFIL-001` | Exfiltration | Outbound tool-call exfil (data in a URL) |
 | `heist` | `CUT-IMP-001` | Impact | Unauthorized transaction, then verify + quantify via the ledger |
 | `ladder` | `CUT-PRIV-002` | Privilege Escalation | Chain low-scope tools (mint an export handle → redeem it) to reach data a scoped tool gates |
+| `proxy` | `CUT-PRIV-001` | Privilege Escalation | Ride an agent's delegated token past its scope — one requester's ticket reads another principal's secret |
 | `smuggler` | `CUT-EVAS-001` | Defense Evasion | Encode a directive (base64 / zero-width / homoglyph) past a raw-text guardrail |
 | `rollcall` | `CUT-INV-001` | (plumbing) | Session inventory reference stub |
 
-**21 modules, every tactic** — `cutout catalog` shows the live implemented/planned split;
+**22 modules, every tactic** — `cutout catalog` shows the live implemented/planned split;
 `cutout hunt <mcp-target>` chains recon → `frisk` → drafted findings against a real server, and
 `cutout hunt --targets <file>` surveys a whole corpus into an aggregated coverage table + report.
 
