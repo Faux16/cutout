@@ -248,6 +248,22 @@ def orchestrator_app(settings: Settings) -> FastAPI:
                 result.obeyed_injected = True
                 result.injected_sources.append(doc.id)
             planned.extend(doc_actions)
+
+        # THE VULNERABILITY (tool-description injection, CUT-INJ-006): the agent reads the
+        # descriptions of its available tools as guidance and obeys any directive in them.
+        for server_id, base in settings.servers.items():
+            try:
+                tools = await mcp_client.list_tools(_mcp_url(base))
+            except Exception:
+                continue
+            for tool in tools:
+                source = f"tool-desc:{server_id}.{tool['name']}"
+                desc_actions = _parse_actions(tool.get("description", ""), source)
+                if desc_actions:
+                    result.obeyed_injected = True
+                    if source not in result.injected_sources:
+                        result.injected_sources.append(source)
+                planned.extend(desc_actions)
         result.planned = planned
 
         result.tool_calls = await _run_directives(planned, settings.servers, settings.token)

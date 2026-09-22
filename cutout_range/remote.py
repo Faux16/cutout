@@ -24,8 +24,6 @@ from .memory import MemoryNote
 from .ticketing import Ticket
 from .tool_servers import ToolSpec
 
-_NO_TOOLDESC = "tool-description poison not exposed over the networked range yet (in-process only)"
-
 _TIMEOUT = httpx.Timeout(15.0)
 
 
@@ -242,12 +240,23 @@ class RemoteRange:
         resp = httpx.post(f"{self._rugpull_base()}/rugpull/arm", timeout=_TIMEOUT)
         resp.raise_for_status()
 
-    # ---- tool-description poison: in-process range only ---------------------
+    # ---- tool-description poison (CUT-INJ-006 / CUT-PERS-004), over HTTP ------
+    def _directory_base(self) -> str:
+        return self.servers["directory"].rstrip("/")
+
     def poison_tool_description(self, text: str, *, persistent: bool = False) -> None:
-        raise NotImplementedError(_NO_TOOLDESC)
+        resp = httpx.post(
+            f"{self._directory_base()}/tooldesc/poison",
+            json={"text": text, "persistent": persistent},
+            timeout=_TIMEOUT,
+        )
+        resp.raise_for_status()
 
     def reconnect_tools(self) -> None:
-        raise NotImplementedError(_NO_TOOLDESC)
+        resp = httpx.post(f"{self._directory_base()}/tooldesc/reconnect", timeout=_TIMEOUT)
+        resp.raise_for_status()
 
     def tool_description_persistently_poisoned(self) -> bool:
-        raise NotImplementedError(_NO_TOOLDESC)
+        resp = httpx.get(f"{self._directory_base()}/tooldesc/status", timeout=_TIMEOUT)
+        resp.raise_for_status()
+        return bool(resp.json().get("persistently_poisoned"))
