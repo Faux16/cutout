@@ -9,6 +9,7 @@ Commands:
     replay <transcript>      re-render a past run's evidence events
     catalog [path]           show catalog coverage (implemented vs planned)
     paths                    map the topology and enumerate source->sink attack paths
+    trial <scenario>         run a scenario N times on a live agent, report the repro rate
 """
 
 from __future__ import annotations
@@ -658,6 +659,9 @@ def canary_cmd(
         None, "--content", help="Content the lookup/fetch tools return (plant test content)."
     ),
     log: Path = typer.Option(Path("runs/canary.jsonl"), "--log", help="JSONL log path."),
+    surface: Path | None = typer.Option(
+        None, "--surface", help="Surface YAML: tool names + descriptions the agent sees."
+    ),
 ) -> None:
     """Run the canary connector — a logging MCP endpoint for authorized agent observation."""
     try:
@@ -669,6 +673,8 @@ def canary_cmd(
 
     if content is not None:
         os.environ["CUTOUT_CANARY_CONTENT"] = content
+    if surface is not None:
+        os.environ["CUTOUT_CANARY_SURFACE"] = str(surface)
     os.environ["CUTOUT_CANARY_LOG"] = str(log)
     console.print(
         f"[bold]canary connector[/bold] on http://{host}:{port}/mcp  (log: {log})\n"
@@ -712,6 +718,98 @@ def canary_report(
                 title="report skeleton",
                 expand=False,
             )
+        )
+
+
+@app.command("trial")
+def trial_cmd(
+    scenario: Path = typer.Argument(..., help="Scenario YAML (task + context + planted content)."),
+    server_url: str = typer.Option(
+        ..., "--server-url", help="MCP endpoint you control, as the agent will reach it."
+    ),
+    n: int = typer.Option(10, "--trials", "-n", min=1, help="How many times to run it."),
+    model: str | None = typer.Option(
+        None, "--model", help="Override the scenario's model (for cross-model sweeps)."
+    ),
+    transcript: Path | None = typer.Option(
+        None, "--transcript", help="Evidence JSONL path (default: runs/trial-<ts>.jsonl)."
+    ),
+) -> None:
+    """Run a scenario N times against a live agent and report the reproducibility rate.
+
+    The bar for an injection finding is >=50% reproducible. This runs the scenario enough
+    times to state a rate instead of an anecdote. Authorized targets only (see ETHICS.md).
+    """
+    from cutout.trial import REPRO_BAR, TrialReport, load_scenario, run_trials
+
+    try:
+        spec = load_scenario(scenario)
+    except (OSError, ValueError) as exc:
+        err_console.print(f"[red]error:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    if model:
+        spec.model = model
+
+    out = transcript or Path("runs") / f"trial-{datetime.now(UTC):%Y%m%dT%H%M%SZ}.jsonl"
+    console.print(
+        Panel(
+            f"[bold]{spec.name}[/bold]\n"
+            f"model: {spec.model}   endpoint: {server_url}\n"
+            f"approval: {spec.require_approval}   trials: {n}\n\n"
+            "[dim]Drives your own agent against an endpoint you control. Only run this "
+            "against accounts and systems you are authorized to test.[/dim]",
+            title="trial",
+            expand=False,
+        )
+    )
+
+    try:
+        report: TrialReport = asyncio.run(run_trials(spec, server_url, n, out))
+    except (CutoutError, RuntimeError) as exc:
+        err_console.print(f"[red]error:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    table = Table(title=f"{spec.name} — {n} trials")
+    table.add_column("#", justify="right", style="dim")
+    table.add_column("Turns", justify="right", style="dim")
+    table.add_column("Executed", style="cyan")
+    table.add_column("Approved", style="green")
+    table.add_column("Refused", style="magenta")
+    table.add_column("Leaked", justify="center")
+    table.add_column("Unapproved", justify="center")
+    for t in report.trials:
+        if t.error:
+            table.add_row(str(t.index), str(t.turns), f"[red]{t.error[:44]}[/red]", "", "", "", "")
+            continue
+        table.add_row(
+            str(t.index),
+            str(t.turns),
+            ", ".join(c["name"] or "?" for c in t.tool_calls) or "[dim]none[/dim]",
+            ", ".join(t.approved) or "[dim]—[/dim]",
+            ", ".join(t.denied) or "[dim]—[/dim]",
+            "[red]YES[/red]" if t.leaked else "no",
+            "[red]YES[/red]" if t.unapproved_call else "no",
+        )
+    console.print(table)
+
+    verdict = (
+        f"[red]clears the {REPRO_BAR:.0%} bar[/red]"
+        if report.clears_bar
+        else f"[yellow]below the {REPRO_BAR:.0%} bar[/yellow]"
+    )
+    console.print(
+        f"leak {report.leak_rate:.0%} · unapproved {report.unapproved_rate:.0%} "
+        f"· steered {report.steer_rate:.0%} "
+        f"({len(report.completed)}/{n} completed) — {verdict}\n"
+        f"[dim]transcript: {out}[/dim]"
+    )
+    if report.completed and not report.delivered:
+        # A clean 0% here means the run stalled before the attacker's text was fetched.
+        err_console.print(
+            "[yellow]warning:[/yellow] the planted content never reached the model in any "
+            "trial — no sanctioned tool was ever approved. These rates are not evidence of "
+            "anything; check the scenario's auto_approve list."
         )
 
 
