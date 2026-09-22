@@ -295,11 +295,19 @@ techniques:
   # ---- PRIV (delegation abuse) ----
   - id: CUT-PRIV-001
     name: Delegated-Token Abuse
+    alias: proxy
     tactic: PRIV
     layer: lateral
     targets: [tool, mcp]
-    desc: Use the agent's delegated credentials beyond the operator's intent.
-    status: planned
+    desc: >-
+      Ride an agent's delegated credential past the scope it was granted for. The token is
+      delegated to serve the requesting principal's own data, but the agent attaches it to
+      any steered call and the server authorizes the token, not the principal — so one
+      requester's ticket walks out with another principal's secret. Refused-without-token vs
+      granted-for-the-wrong-principal is the abuse. Mitigation: mint per-request tokens bound
+      to the requester, authorize the target against the requester's grant, and alarm on any
+      call whose subject differs from the request's originator.
+    status: implemented
   - id: CUT-PRIV-002
     name: Scope Escalation via Chaining
     alias: ladder
