@@ -150,6 +150,29 @@ not `use CUT-EXEC-001` (the ID stays canonical; the alias is the ergonomic handl
 `cutout hunt <mcp-target>` chains recon → `frisk` → drafted findings against a real server, and
 `cutout hunt --targets <file>` surveys a whole corpus into an aggregated coverage table + report.
 
+## Findings in the wild
+
+Cutout is developed against its own range, but the point is real systems. Vulnerabilities
+found with it, disclosed coordinately and published as advisories:
+
+| Advisory | Affected | Class | Status |
+|---|---|---|---|
+| [SANKET-2026-001](https://github.com/Faux16/security-advisories/blob/main/advisories/SANKET-2026-001-postgres-mcp-server.md) | `postgres-mcp-server` (PyPI) | Arbitrary local file read via a "read-only" query tool | CVE requested (MITRE CNA-LR) |
+| [SANKET-2026-002](https://github.com/Faux16/security-advisories/blob/main/advisories/SANKET-2026-002-safedb-mcp.md) | `@safedb/safedb-mcp` (npm) | PII-masking bypass via scalar subquery | Maintainer acknowledged; CVE requested |
+| [SANKET-2026-003](https://github.com/Faux16/security-advisories/blob/main/advisories/SANKET-2026-003-universal-db-mcp.md) | `universal-db-mcp` (PyPI) | Arbitrary local file read via DuckDB `read_text` | CVE requested (MITRE CNA-LR) |
+
+The two file-read issues are the shape `cutout hunt <mcp-target>` is built to surface —
+recon, then `frisk`, then a drafted finding — and they are the shape the taxonomy predicts:
+a tool advertised as read-only that an agent can drive into reading anything the server
+process can reach. The masking bypass is the same boundary seen from the other side: the
+tool's guarantee holds for the columns it inspects and not for the query that wraps them.
+
+Related research not produced by Cutout, in the same
+[advisories repo](https://github.com/Faux16/security-advisories):
+[MCP tool annotations as a trust boundary](https://github.com/Faux16/security-advisories/blob/main/research/2026-09-mcp-annotation-trust.md)
+— a manual audit, included because it maps the same data-vs-instructions boundary from the
+client side.
+
 ## The range
 
 A deliberately-vulnerable multi-agent stack, shipped with the framework. Its weaknesses
