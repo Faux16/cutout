@@ -13,7 +13,7 @@ from .errors import (
 )
 from .evidence import EvidenceEvent, EvidenceSink, EvidenceWriter, Phase, read_events
 from .module import BaseModule, Module, ModuleSpec, Option
-from .provider import MockProvider, Provider
+from .provider import MockProvider, OllamaProvider, Provider
 from .registry import (
     get_module,
     get_registry,
@@ -45,6 +45,7 @@ __all__ = [
     "ModuleNotRegisteredError",
     "ModuleResult",
     "ModuleSpec",
+    "OllamaProvider",
     "Option",
     "OptionError",
     "Phase",

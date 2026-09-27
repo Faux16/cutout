@@ -151,6 +151,26 @@ not `use CUT-EXEC-001` (the ID stays canonical; the alias is the ergonomic handl
 `cutout hunt <mcp-target>` chains recon → `frisk` → drafted findings against a real server, and
 `cutout hunt --targets <file>` surveys a whole corpus into an aggregated coverage table + report.
 
+## Against a real model, not just the range
+
+Modules prove a technique against the deterministic range; the harder question is whether it
+lands against a *real* model — and against a *real* defense. `cutout liveeval` answers that for
+approval farming (`nod` / CUT-PRIV-003): it puts a live local model (via **ollama**, so the run
+reaches only localhost) in the approver's seat and measures, over N stochastic trials, how often
+a farmed justification wins a "yes" the honest request does not — under a naive prompt and a
+risk-based hardened one.
+
+```bash
+cutout liveeval --provider ollama --model llama3.2:1b --trials 20
+```
+
+It reports a four-cell repro matrix (posture × justification → approve rate). The consistent
+shape: the farmed justification pushes the naive gate's approval **past the 50% reproducibility
+bar**, while the hardened, risk-based prompt drives it to **~0%** — a real technique, a real
+mitigation, a reproducible rate rather than one screenshot. (`--provider mock` runs the pipeline
+offline with no model; `cutout trial` is the sibling harness for live tool-calling agents over an
+MCP endpoint you control.)
+
 ## Findings in the wild
 
 Cutout is developed against its own range, but the point is real systems. Vulnerabilities

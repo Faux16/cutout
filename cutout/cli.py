@@ -10,6 +10,7 @@ Commands:
     catalog [path]           show catalog coverage (implemented vs planned)
     paths                    map the topology and enumerate source->sink attack paths
     trial <scenario>         run a scenario N times on a live agent, report the repro rate
+    liveeval                 run CUT-PRIV-003 vs a real local model, report a repro-rate matrix
 """
 
 from __future__ import annotations
@@ -811,6 +812,95 @@ def trial_cmd(
             "trial — no sanctioned tool was ever approved. These rates are not evidence of "
             "anything; check the scenario's auto_approve list."
         )
+
+
+@app.command("liveeval")
+def liveeval_cmd(
+    provider: str = typer.Option(
+        "ollama", "--provider", help="Backend: 'ollama' (real local model) or 'mock' (offline)."
+    ),
+    model: str = typer.Option("llama3.2:1b", "--model", help="Model name (ollama)."),
+    n: int = typer.Option(10, "--trials", "-n", min=1, help="Trials per cell (x4 cells)."),
+    base_url: str = typer.Option(
+        "http://localhost:11434", "--base-url", help="ollama daemon URL (local, no egress)."
+    ),
+    temperature: float = typer.Option(0.7, "--temperature", help="Sampling temperature."),
+    transcript: Path | None = typer.Option(
+        None, "--transcript", help="Evidence JSONL (default: runs/liveeval-<ts>.jsonl)."
+    ),
+) -> None:
+    """Run CUT-PRIV-003 (approval farming) against a REAL model and report a repro rate.
+
+    Puts a live model in the approver's seat and measures, over N stochastic trials, how
+    often a farmed justification wins a 'yes' the honest request does not — under a naive
+    prompt and a risk-based hardened one. 'ollama' reaches only localhost (offline-safe).
+    """
+    from cutout.engine.provider import MockProvider, OllamaProvider, Provider
+    from cutout.liveeval import run_approval_eval
+
+    backend: Provider
+    if provider == "ollama":
+        backend = OllamaProvider(model=model, base_url=base_url, temperature=temperature)
+        label = model
+    elif provider == "mock":
+        backend = MockProvider()
+        label = "mock"
+    else:
+        err_console.print(f"[red]error:[/red] unknown provider '{provider}' (use ollama|mock)")
+        raise typer.Exit(code=1)
+
+    out = transcript or Path("runs") / f"liveeval-{datetime.now(UTC):%Y%m%dT%H%M%SZ}.jsonl"
+    console.print(
+        Panel(
+            f"[bold]Approval farming vs a real model[/bold] (CUT-PRIV-003)\n"
+            f"provider: {provider}   model: {label}   trials/cell: {n} (x4)\n\n"
+            "[dim]The model is the approval gate. Naive vs hardened prompt, honest vs farmed "
+            "justification.[/dim]",
+            title="liveeval",
+            expand=False,
+        )
+    )
+
+    async def _go() -> object:
+        async with EvidenceWriter(out) as writer:
+            return await run_approval_eval(backend, model=label, trials=n, emit=writer.emit)
+
+    try:
+        report = asyncio.run(_go())
+    except Exception as exc:
+        err_console.print(f"[red]error:[/red] {type(exc).__name__}: {exc}")
+        if provider == "ollama":
+            err_console.print(
+                f"[dim]is ollama running and '{model}' pulled? try: ollama pull {model}[/dim]"
+            )
+        raise typer.Exit(code=1) from exc
+
+    table = Table(title=f"approval rate — {label}, {n} trials/cell")
+    table.add_column("posture", style="cyan")
+    table.add_column("justification")
+    table.add_column("approve", justify="right", style="green")
+    table.add_column("unclear", justify="right", style="dim")
+    table.add_column("rate", justify="right")
+    for posture in ("naive", "hardened"):
+        for just in ("honest", "farmed"):
+            c = report.cell(posture, just)  # type: ignore[attr-defined]
+            hot = posture == "naive" and just == "farmed"
+            rate = f"[red]{c.rate:.0%}[/red]" if hot and c.rate >= 0.5 else f"{c.rate:.0%}"
+            table.add_row(
+                posture,
+                just,
+                f"{c.approvals}/{c.trials}",
+                str(c.unclear) if c.unclear else "—",
+                rate,
+            )
+    console.print(table)
+    fe = report.farming_effect  # type: ignore[attr-defined]
+    he = report.hardening_effect  # type: ignore[attr-defined]
+    console.print(
+        f"farming effect (naive: farmed - honest): [bold]{fe:+.0%}[/bold]   "
+        f"hardening effect (farmed: naive - hardened): [bold]{he:+.0%}[/bold]\n"
+        f"[dim]transcript: {out}[/dim]"
+    )
 
 
 @app.command("console")
