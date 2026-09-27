@@ -1,15 +1,18 @@
-"""LLM provider abstraction, a deterministic offline mock, and a local ollama backend.
+"""LLM provider abstraction, a deterministic offline mock, and real backends.
 
 The demo must run with zero external calls, so the default backend is a mock that maps
 fixed inputs to fixed outputs. :class:`OllamaProvider` drives a **real** model running
 locally via ollama (http://localhost:11434) — a genuine LLM with no external network
 calls, so a technique can be exercised against a real decision-maker while still meeting
-the offline / kiosk constraint. Both satisfy the same :class:`Provider` protocol.
+the offline / kiosk constraint. :class:`OpenAIProvider` drives a **frontier** model over
+the OpenAI API (authorized use only: your own account/model — see ETHICS.md). All satisfy
+the same :class:`Provider` protocol.
 """
 
 from __future__ import annotations
 
 import hashlib
+import os
 from typing import Protocol, runtime_checkable
 
 import httpx
@@ -80,3 +83,48 @@ class OllamaProvider:
             body = resp.json()
         content = body.get("message", {}).get("content", "")
         return str(content)
+
+
+class OpenAIProvider:
+    """A frontier LLM backend: an OpenAI chat model over the Chat Completions API.
+
+    Authorized use only — an account and model you own (see ETHICS.md). The key is read from
+    ``api_key`` or the ``OPENAI_API_KEY`` env var (lowercase ``openai_api_key`` also accepted).
+    ``temperature`` is exposed because a repro-rate eval needs stochastic sampling.
+    """
+
+    def __init__(
+        self,
+        model: str = "gpt-4o-mini",
+        *,
+        api_key: str | None = None,
+        base_url: str = "https://api.openai.com/v1",
+        temperature: float = 0.7,
+        timeout: float = 60.0,
+    ) -> None:
+        self.model = model
+        self.base_url = base_url.rstrip("/")
+        self.temperature = temperature
+        self.timeout = timeout
+        self.api_key = (
+            api_key or os.environ.get("OPENAI_API_KEY") or os.environ.get("openai_api_key")  # noqa: SIM112 - the project's .env uses lowercase
+        )
+        if not self.api_key:
+            raise RuntimeError(
+                "no OpenAI API key: set OPENAI_API_KEY (an account you own) — see ETHICS.md"
+            )
+
+    async def complete(self, prompt: str, *, system: str | None = None) -> str:
+        messages: list[dict[str, str]] = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
+        payload = {"model": self.model, "messages": messages, "temperature": self.temperature}
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            resp = await client.post(
+                f"{self.base_url}/chat/completions", json=payload, headers=headers
+            )
+            resp.raise_for_status()
+            body = resp.json()
+        return str(body["choices"][0]["message"]["content"])

@@ -817,12 +817,14 @@ def trial_cmd(
 @app.command("liveeval")
 def liveeval_cmd(
     provider: str = typer.Option(
-        "ollama", "--provider", help="Backend: 'ollama' (real local model) or 'mock' (offline)."
+        "ollama",
+        "--provider",
+        help="Backend: 'ollama' (real local model), 'openai' (frontier, your key), or 'mock'.",
     ),
-    model: str = typer.Option("llama3.2:1b", "--model", help="Model name (ollama)."),
-    n: int = typer.Option(10, "--trials", "-n", min=1, help="Trials per cell (x4 cells)."),
-    base_url: str = typer.Option(
-        "http://localhost:11434", "--base-url", help="ollama daemon URL (local, no egress)."
+    model: str = typer.Option("llama3.2:1b", "--model", help="Model name (ollama/openai)."),
+    n: int = typer.Option(10, "--trials", "-n", min=1, help="Trials per cell (x6 cells)."),
+    base_url: str | None = typer.Option(
+        None, "--base-url", help="Override the backend's API base URL."
     ),
     temperature: float = typer.Option(0.7, "--temperature", help="Sampling temperature."),
     transcript: Path | None = typer.Option(
@@ -832,28 +834,44 @@ def liveeval_cmd(
     """Run CUT-PRIV-003 (approval farming) against a REAL model and report a repro rate.
 
     Puts a live model in the approver's seat and measures, over N stochastic trials, how
-    often a farmed justification wins a 'yes' the honest request does not — under a naive
-    prompt and a risk-based hardened one. 'ollama' reaches only localhost (offline-safe).
+    often a farmed justification wins a 'yes' the honest request does not — under a naive, a
+    neutral, and a risk-based hardened prompt. 'ollama' reaches only localhost (offline-safe);
+    'openai' uses your own account/model over the API (authorized use only, see ETHICS.md).
     """
-    from cutout.engine.provider import MockProvider, OllamaProvider, Provider
+    from cutout.engine.provider import MockProvider, OllamaProvider, OpenAIProvider, Provider
     from cutout.liveeval import run_approval_eval
 
     backend: Provider
     if provider == "ollama":
-        backend = OllamaProvider(model=model, base_url=base_url, temperature=temperature)
+        backend = OllamaProvider(
+            model=model, base_url=base_url or "http://localhost:11434", temperature=temperature
+        )
+        label = model
+    elif provider == "openai":
+        try:
+            backend = OpenAIProvider(
+                model=model,
+                base_url=base_url or "https://api.openai.com/v1",
+                temperature=temperature,
+            )
+        except RuntimeError as exc:
+            err_console.print(f"[red]error:[/red] {exc}")
+            raise typer.Exit(code=1) from exc
         label = model
     elif provider == "mock":
         backend = MockProvider()
         label = "mock"
     else:
-        err_console.print(f"[red]error:[/red] unknown provider '{provider}' (use ollama|mock)")
+        err_console.print(
+            f"[red]error:[/red] unknown provider '{provider}' (use ollama|openai|mock)"
+        )
         raise typer.Exit(code=1)
 
     out = transcript or Path("runs") / f"liveeval-{datetime.now(UTC):%Y%m%dT%H%M%SZ}.jsonl"
     console.print(
         Panel(
             f"[bold]Approval farming vs a real model[/bold] (CUT-PRIV-003)\n"
-            f"provider: {provider}   model: {label}   trials/cell: {n} (x4)\n\n"
+            f"provider: {provider}   model: {label}   trials/cell: {n} (x6)\n\n"
             "[dim]The model is the approval gate. Naive vs hardened prompt, honest vs farmed "
             "justification.[/dim]",
             title="liveeval",
@@ -881,10 +899,10 @@ def liveeval_cmd(
     table.add_column("approve", justify="right", style="green")
     table.add_column("unclear", justify="right", style="dim")
     table.add_column("rate", justify="right")
-    for posture in ("naive", "hardened"):
+    for posture in ("naive", "neutral", "hardened"):
         for just in ("honest", "farmed"):
             c = report.cell(posture, just)  # type: ignore[attr-defined]
-            hot = posture == "naive" and just == "farmed"
+            hot = posture in ("naive", "neutral") and just == "farmed"
             rate = f"[red]{c.rate:.0%}[/red]" if hot and c.rate >= 0.5 else f"{c.rate:.0%}"
             table.add_row(
                 posture,
@@ -894,10 +912,11 @@ def liveeval_cmd(
                 rate,
             )
     console.print(table)
-    fe = report.farming_effect  # type: ignore[attr-defined]
+    fn = report.farming_effect_neutral  # type: ignore[attr-defined]
     he = report.hardening_effect  # type: ignore[attr-defined]
     console.print(
-        f"farming effect (naive: farmed - honest): [bold]{fe:+.0%}[/bold]   "
+        f"farming effect (neutral: farmed - honest): [bold]{fn:+.0%}[/bold] "
+        f"[dim](the defensible, non-leading number)[/dim]   "
         f"hardening effect (farmed: naive - hardened): [bold]{he:+.0%}[/bold]\n"
         f"[dim]transcript: {out}[/dim]"
     )

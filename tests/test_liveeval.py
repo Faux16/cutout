@@ -42,8 +42,10 @@ async def test_eval_isolates_the_farming_effect() -> None:
 
     assert report.cell("naive", "honest").rate == 0.0
     assert report.cell("naive", "farmed").rate == 1.0  # farming lands under the naive gate
+    assert report.cell("neutral", "farmed").rate == 0.0  # scripted only obeys the naive gate
     assert report.cell("hardened", "farmed").rate == 0.0  # hardened prompt resists
     assert report.farming_effect == 1.0  # +100 pts naive: farmed - honest
+    assert report.farming_effect_neutral == 0.0  # scripted doesn't self-farm under neutral
     assert report.hardening_effect == 1.0  # +100 pts farmed: naive - hardened
 
 
@@ -54,8 +56,8 @@ async def test_eval_emits_evidence_per_cell() -> None:
         events.append(event)
 
     await run_approval_eval(_ScriptedProvider(), model="scripted", trials=3, emit=_emit)
-    # Four cells (posture x justification), one evidence event each.
-    assert len(events) == 4
+    # Six cells (3 postures x 2 justifications), one evidence event each.
+    assert len(events) == 6
     actions = {getattr(e, "action", None) for e in events}
     assert actions == {"liveeval.cell"}
 
