@@ -20,6 +20,7 @@ from .corpus import Document, RagCorpus
 from .guardrail import Guardrail, default_guardrail
 from .hosts import HostInfo
 from .memory import MemoryNote
+from .subagent import SubAgent
 from .ticketing import Ticket, TicketQueue
 from .tool_servers import (
     CommandServer,
@@ -328,6 +329,33 @@ class Range:
         if result.error:
             out["error"] = result.error
         return out
+
+    def spawn_subagent(
+        self,
+        task: str,
+        *,
+        inherit: bool = True,
+        allowed_tools: list[str] | None = None,
+    ) -> SubAgent:
+        """Spawn a sub-agent for ``task`` (the CUT-PRIV-005 surface).
+
+        ``inherit=True`` (the vulnerable default) hands the child the orchestrator's **full**
+        tool set and its delegated token — the child can reach crown-jewel tools the task never
+        needed. ``inherit=False`` is least privilege: the child gets only ``allowed_tools`` and
+        **no** delegated token, so a sensitive call is denied (unknown tool and/or no credential).
+        """
+        label = task.strip()[:24] or "task"
+        if inherit:
+            return SubAgent(
+                f"subagent[{label}]",
+                self.servers,
+                dict(self.tool_index),
+                DELEGATED_TOKEN,
+                inherited=True,
+            )
+        allowed = set(allowed_tools or [])
+        scoped_index = {n: s for n, s in self.tool_index.items() if n in allowed}
+        return SubAgent(f"subagent[{label}]", self.servers, scoped_index, None, inherited=False)
 
     async def send_a2a(
         self, to_agent: str, message: str, message_from: str = "orchestrator"

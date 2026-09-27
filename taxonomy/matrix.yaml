@@ -353,11 +353,19 @@ techniques:
     status: implemented
   - id: CUT-PRIV-005
     name: Privileged Sub-Agent Spawning
+    alias: scion
     tactic: PRIV
     layer: lateral
     targets: [orchestrator]
-    desc: Spawn a sub-agent inheriting broader privileges than intended.
-    status: planned
+    desc: >-
+      Spawn a sub-agent that inherits broader privileges than its task needs. Spawning should
+      attenuate authority, but the child inherits the parent's full delegated token and tool set,
+      so a benign narrow task yields a child that can invoke crown-jewel tools it never needed once
+      steered. Refused-when-least-privilege vs granted-when-inherited, for the same child action, is
+      the finding. Mitigation: derive a task-scoped child credential (never pass the parent's),
+      allow-list the child's tools, deny sensitive tools to sub-agents by default, and alarm when a
+      child touches a tool outside its task envelope.
+    status: implemented
 
   # ---- EVAS ----
   - id: CUT-EVAS-001

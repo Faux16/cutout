@@ -33,6 +33,7 @@ from .guardrail import (
 from .hosts import HostInfo
 from .mcp_target import McpTarget
 from .range import Range, connect_range, get_range, reset_ranges
+from .subagent import SubAgent, SubAgentResult
 from .tool_servers import ToolResult, ToolServer, ToolSpec
 
 __all__ = [
@@ -50,6 +51,8 @@ __all__ = [
     "OrchestratorResult",
     "RagCorpus",
     "Range",
+    "SubAgent",
+    "SubAgentResult",
     "ToolResult",
     "ToolServer",
     "ToolSpec",
