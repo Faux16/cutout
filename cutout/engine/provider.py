@@ -107,9 +107,7 @@ class OpenAIProvider:
         self.temperature = temperature
         self.timeout = timeout
         self.api_key = (
-            api_key
-            or os.environ.get("OPENAI_API_KEY")
-            or os.environ.get("openai_api_key")  # noqa: SIM112 - the project's .env uses lowercase
+            api_key or os.environ.get("OPENAI_API_KEY") or os.environ.get("openai_api_key")  # noqa: SIM112 - the project's .env uses lowercase
         )
         if not self.api_key:
             raise RuntimeError(
