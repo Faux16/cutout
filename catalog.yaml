@@ -97,6 +97,10 @@ techniques:
     name: Cross-Agent Trust Exploitation
     tactic: PRIV
     targets: [a2a]
+  - id: CUT-PRIV-005
+    name: Privileged Sub-Agent Spawning
+    tactic: PRIV
+    targets: [orchestrator]
   - id: CUT-LAT-006
     name: Self-Propagating Agent Worm
     tactic: LAT

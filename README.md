@@ -143,10 +143,11 @@ not `use CUT-EXEC-001` (the ID stays canonical; the alias is the ergonomic handl
 | `proxy` | `CUT-PRIV-001` | Privilege Escalation | Ride an agent's delegated token past its scope — one requester's ticket reads another principal's secret |
 | `nod` | `CUT-PRIV-003` | Privilege Escalation | Farm a human-in-the-loop approval — a stacked-legitimacy justification wins the yes an honest request is denied |
 | `vouch` | `CUT-PRIV-004` | Privilege Escalation | Cross-agent trust exploitation — relay an untrusted request through a trusted peer to inherit a downstream agent's privilege |
+| `scion` | `CUT-PRIV-005` | Privilege Escalation | Privileged sub-agent spawning — a child spawned for a narrow task inherits the parent's full token + tools |
 | `smuggler` | `CUT-EVAS-001` | Defense Evasion | Encode a directive (base64 / zero-width / homoglyph) past a raw-text guardrail |
 | `rollcall` | `CUT-INV-001` | (plumbing) | Session inventory reference stub |
 
-**24 modules, every tactic** — `cutout catalog` shows the live implemented/planned split;
+**25 modules, every tactic** — `cutout catalog` shows the live implemented/planned split;
 `cutout hunt <mcp-target>` chains recon → `frisk` → drafted findings against a real server, and
 `cutout hunt --targets <file>` surveys a whole corpus into an aggregated coverage table + report.
 
