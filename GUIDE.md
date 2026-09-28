@@ -226,6 +226,8 @@ cutout run deaddrop --opt anchor=refund         # run one; writes runs/<id>-<ts>
 cutout run puppet --target http://127.0.0.1:8600 # against the live range
 cutout replay runs/CUT-INJ-002-*.jsonl          # re-narrate a transcript
 cutout catalog                                 # technique coverage (implemented vs planned)
+cutout liveeval --provider ollama --model llama3.2:1b  # run a technique vs a REAL model (see 5c)
+cutout trial scenario.yaml --server-url <mcp>   # repro-rate vs a live tool-calling agent (see 5c)
 ```
 
 `--opt k=v` is repeatable; `--out <path>` sets the transcript location; `--target` picks the
@@ -255,6 +257,51 @@ instructions embedded in tool output steer the agent) and `submit_report` (a sin
 whatever the agent sends — if injected content makes the agent ship data here, it's flagged
 `exfil_candidate` in the log). Every call is recorded to the JSONL log and printed live.
 **Only connect it to accounts/agents you are authorized to test.**
+
+## 5c. Live-target evaluation — does it land against a *real* model?
+
+The modules prove a technique against the deterministic range. These two harnesses answer the
+harder question — *does it reproduce against a real model, and against a real defense?* — as a
+**rate over N trials**, not a single screenshot. Both write the same evidence JSONL as any run.
+**Authorized use only: your own accounts/models/endpoints — see [ETHICS.md](ETHICS.md).**
+
+### `cutout liveeval` — approval farming vs a real model (CUT-PRIV-003)
+
+Puts a live model in the *approver's* seat and measures how often a farmed justification wins a
+"yes" the honest request does not, across three prompt postures (`naive`, `neutral`, `hardened`)
+× two justifications (`honest`, `farmed`) — a six-cell repro matrix.
+
+```bash
+cutout liveeval --provider ollama --model llama3.2:1b --trials 20   # a real LOCAL model (localhost-only, offline-safe)
+cutout liveeval --provider openai --model gpt-4o-mini --trials 20   # a FRONTIER model (your own OpenAI account)
+cutout liveeval --provider mock --trials 5                          # pipeline only, no model (CI/offline)
+```
+
+- `--provider` — `ollama` (reaches only `http://localhost:11434`, so it meets the offline/kiosk
+  constraint), `openai` (Chat Completions; key from `OPENAI_API_KEY`, or the project `.env`), or
+  `mock`. `--model`, `--trials/-n`, `--temperature`, `--base-url`, `--transcript` as needed.
+- **Read the `neutral` row** as the headline: the naive prompt tells the model to trust apparent
+  legitimacy (leading), while the neutral prompt just asks APPROVE/DENY — so a farmed approval
+  under `neutral` is the model socially-engineering *itself*. The `hardened` posture is the
+  risk-based mitigation; it should drive farmed approval toward 0%.
+- ollama needs the model pulled first: `ollama pull llama3.2:1b`. The GPT-5 family is served via
+  the Responses API (not Chat Completions), so use a `gpt-4o`-class model with this backend.
+
+### `cutout trial` — reproducibility of an injection against a live tool-calling agent
+
+Runs a **scenario** (a benign task + sensitive context + attacker-controlled `planted` content)
+N times against a live agent wired to an MCP endpoint *you control*, and reports the rate at
+which the planted content steers a tool call or leaks the context (tracked with a per-trial
+canary token). The bar for an injection finding is **≥50% reproducible**.
+
+```bash
+cutout trial scenarios/my-scenario.yaml --server-url https://my-mcp.example/mcp --trials 20
+```
+
+- Needs `OPENAI_API_KEY` for an account you own (it drives *your* agent against *your* endpoint).
+- `--model` overrides the scenario's model (for cross-model sweeps); `--transcript` sets the JSONL.
+- The scenario YAML declares `task`, `context` (must contain `{token}`), `planted`,
+  `auto_approve` (tools the victim's task sanctions), and `require_approval`.
 
 ## 6. The modules
 
