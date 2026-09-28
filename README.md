@@ -155,21 +155,33 @@ not `use CUT-EXEC-001` (the ID stays canonical; the alias is the ergonomic handl
 
 Modules prove a technique against the deterministic range; the harder question is whether it
 lands against a *real* model — and against a *real* defense. `cutout liveeval` answers that for
-approval farming (`nod` / CUT-PRIV-003): it puts a live local model (via **ollama**, so the run
-reaches only localhost) in the approver's seat and measures, over N stochastic trials, how often
-a farmed justification wins a "yes" the honest request does not — under a naive prompt and a
-risk-based hardened one.
+approval farming (`nod` / CUT-PRIV-003): it puts a live model in the approver's seat and measures,
+over N stochastic trials, how often a farmed justification wins a "yes" the honest request does
+not — across three prompt postures (naive, **neutral**, hardened). The neutral prompt is the
+defensible one: it never tells the model to trust apparent legitimacy, so a farmed approval there
+is the model socially-engineering *itself*, not obeying an instruction to.
 
 ```bash
-cutout liveeval --provider ollama --model llama3.2:1b --trials 20
+cutout liveeval --provider ollama --model llama3.2:1b --trials 20     # a real local model (localhost-only)
+cutout liveeval --provider openai --model gpt-4o-mini --trials 20     # a frontier model (your own account)
 ```
 
-It reports a four-cell repro matrix (posture × justification → approve rate). The consistent
-shape: the farmed justification pushes the naive gate's approval **past the 50% reproducibility
-bar**, while the hardened, risk-based prompt drives it to **~0%** — a real technique, a real
-mitigation, a reproducible rate rather than one screenshot. (`--provider mock` runs the pipeline
-offline with no model; `cutout trial` is the sibling harness for live tool-calling agents over an
-MCP endpoint you control.)
+It reports a repro matrix (posture × justification → approve rate). Run against real models
+(N=20, neutral posture = the farmed approval rate under the non-leading prompt):
+
+| model | farmed approval (neutral) | with the hardened prompt |
+|-------|:-------------------------:|:------------------------:|
+| `llama3.2:1b` (local) | 47% | 0% |
+| `gpt-4o-mini` | **95%** | 0% |
+| `gpt-4o` | **0%** | 0% |
+
+The story in one line: approval farming reliably lands on small and mid-tier models used in real
+agent stacks (`gpt-4o-mini` approves the secret release **95%** of the time under a plain approval
+prompt), a top-tier aligned model (`gpt-4o`) refuses a clearly-harmful action outright, and a
+risk-based **hardened system prompt is a working mitigation across the board** (→ 0%). A real
+technique, a real defense, as a reproducible rate rather than one screenshot. (`--provider mock`
+runs the pipeline offline; `cutout trial` is the sibling harness for live tool-calling agents over
+an MCP endpoint you control. Rates are stochastic — run N.)
 
 ## Findings in the wild
 
