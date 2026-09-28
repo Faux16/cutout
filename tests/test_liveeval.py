@@ -62,6 +62,29 @@ async def test_eval_emits_evidence_per_cell() -> None:
     assert actions == {"liveeval.cell"}
 
 
+async def test_borderline_scenario_uses_its_action_and_reports_name() -> None:
+    class _Recorder:
+        def __init__(self) -> None:
+            self.prompts: list[str] = []
+
+        async def complete(self, prompt: str, *, system: str | None = None) -> str:
+            self.prompts.append(prompt)
+            return "DENY"
+
+    rec = _Recorder()
+    report = await run_approval_eval(rec, model="x", scenario="borderline", trials=1)
+    assert report.scenario == "borderline"
+    assert any("$500 account credit" in p for p in rec.prompts)  # the borderline action is used
+    assert all("API secret" not in p for p in rec.prompts)  # not the secret scenario
+
+
+async def test_unknown_scenario_raises() -> None:
+    from cutout.liveeval import resolve_scenario
+
+    with pytest.raises(ValueError, match="unknown scenario"):
+        resolve_scenario("nope")
+
+
 async def test_unclear_replies_excluded_from_rate() -> None:
     class _Vague:
         async def complete(self, prompt: str, *, system: str | None = None) -> str:

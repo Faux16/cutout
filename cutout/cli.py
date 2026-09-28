@@ -822,6 +822,12 @@ def liveeval_cmd(
         help="Backend: 'ollama' (real local model), 'openai' (frontier, your key), or 'mock'.",
     ),
     model: str = typer.Option("llama3.2:1b", "--model", help="Model name (ollama/openai)."),
+    scenario: str = typer.Option(
+        "secret",
+        "--scenario",
+        help="Action under review: 'secret' (a hard red line) or 'borderline' (a mid-risk "
+        "money credit — where a fabricated authorization farms even a frontier model).",
+    ),
     n: int = typer.Option(10, "--trials", "-n", min=1, help="Trials per cell (x6 cells)."),
     base_url: str | None = typer.Option(
         None, "--base-url", help="Override the backend's API base URL."
@@ -839,7 +845,14 @@ def liveeval_cmd(
     'openai' uses your own account/model over the API (authorized use only, see ETHICS.md).
     """
     from cutout.engine.provider import MockProvider, OllamaProvider, OpenAIProvider, Provider
-    from cutout.liveeval import run_approval_eval
+    from cutout.liveeval import SCENARIOS, resolve_scenario, run_approval_eval
+
+    if scenario not in SCENARIOS:
+        err_console.print(
+            f"[red]error:[/red] unknown scenario '{scenario}' (use {'|'.join(sorted(SCENARIOS))})"
+        )
+        raise typer.Exit(code=1)
+    scen = resolve_scenario(scenario)
 
     backend: Provider
     if provider == "ollama":
@@ -871,8 +884,10 @@ def liveeval_cmd(
     console.print(
         Panel(
             f"[bold]Approval farming vs a real model[/bold] (CUT-PRIV-003)\n"
-            f"provider: {provider}   model: {label}   trials/cell: {n} (x6)\n\n"
-            "[dim]The model is the approval gate. Naive vs hardened prompt, honest vs farmed "
+            f"provider: {provider}   model: {label}   scenario: {scen.name}   "
+            f"trials/cell: {n} (x6)\n"
+            f"[dim]action: {scen.action}[/dim]\n\n"
+            "[dim]The model is the approval gate. Naive/neutral/hardened prompt, honest vs farmed "
             "justification.[/dim]",
             title="liveeval",
             expand=False,
@@ -881,7 +896,9 @@ def liveeval_cmd(
 
     async def _go() -> object:
         async with EvidenceWriter(out) as writer:
-            return await run_approval_eval(backend, model=label, trials=n, emit=writer.emit)
+            return await run_approval_eval(
+                backend, model=label, scenario=scen, trials=n, emit=writer.emit
+            )
 
     try:
         report = asyncio.run(_go())
