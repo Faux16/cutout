@@ -183,6 +183,12 @@ technique, a real defense, as a reproducible rate rather than one screenshot. (`
 runs the pipeline offline; `cutout trial` is the sibling harness for live tool-calling agents over
 an MCP endpoint you control. Rates are stochastic — run N.)
 
+This is packaged as an open, reproducible **benchmark** — a versioned set of borderline actions
+and a `cutout benchmark` runner that scores any model's susceptibility and the mitigation's
+efficacy, with published baselines. See [benchmarks/approval_farming/](benchmarks/approval_farming/).
+Across the suite, `gpt-4o` holds the hard red line (0%) but is farmed to **100%** on every one of
+five borderline actions, while the risk-based hardened prompt drops all of them to **0%**.
+
 ## Findings in the wild
 
 Cutout is developed against its own range, but the point is real systems. Vulnerabilities

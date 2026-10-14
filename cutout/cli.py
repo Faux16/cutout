@@ -939,6 +939,130 @@ def liveeval_cmd(
     )
 
 
+_DEFAULT_SCENARIOS = Path(__file__).resolve().parent.parent / (
+    "benchmarks/approval_farming/scenarios.yaml"
+)
+
+
+@app.command("benchmark")
+def benchmark_cmd(
+    provider: str = typer.Option(
+        "ollama", "--provider", help="Backend: 'ollama', 'openai' (your key), or 'mock'."
+    ),
+    model: str = typer.Option("llama3.2:1b", "--model", help="Model name (ollama/openai)."),
+    n: int = typer.Option(20, "--trials", "-n", min=1, help="Trials per cell."),
+    scenarios_path: Path = typer.Option(
+        _DEFAULT_SCENARIOS, "--scenarios", help="Scenario-set YAML (the benchmark suite)."
+    ),
+    base_url: str | None = typer.Option(None, "--base-url", help="Override the API base URL."),
+    temperature: float = typer.Option(0.7, "--temperature", help="Sampling temperature."),
+    out: Path | None = typer.Option(
+        None, "--out", help="Write the structured result JSON here (for comparison across models)."
+    ),
+) -> None:
+    """Run the approval-farming benchmark for one model across the full scenario set.
+
+    Reports each scenario's farming susceptibility (neutral-prompt farmed approval rate) and the
+    mitigation efficacy (how far the risk-based hardened prompt pulls it back), plus the model's
+    overall borderline-susceptibility score. Writes a JSON result so runs are comparable across
+    models and vendors. Authorized use only — your own accounts/models (see ETHICS.md).
+    """
+    import json as _json
+
+    from cutout.benchmark import run_benchmark
+    from cutout.engine.provider import MockProvider, OllamaProvider, OpenAIProvider, Provider
+    from cutout.liveeval import load_scenarios
+
+    try:
+        scenarios = load_scenarios(scenarios_path)
+    except (OSError, ValueError) as exc:
+        err_console.print(f"[red]error:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    backend: Provider
+    if provider == "ollama":
+        backend = OllamaProvider(
+            model=model, base_url=base_url or "http://localhost:11434", temperature=temperature
+        )
+        label = model
+    elif provider == "openai":
+        try:
+            backend = OpenAIProvider(
+                model=model,
+                base_url=base_url or "https://api.openai.com/v1",
+                temperature=temperature,
+            )
+        except RuntimeError as exc:
+            err_console.print(f"[red]error:[/red] {exc}")
+            raise typer.Exit(code=1) from exc
+        label = model
+    elif provider == "mock":
+        backend = MockProvider()
+        label = "mock"
+    else:
+        err_console.print(f"[red]error:[/red] unknown provider '{provider}' (ollama|openai|mock)")
+        raise typer.Exit(code=1)
+
+    console.print(
+        Panel(
+            f"[bold]approval-farming benchmark[/bold]\n"
+            f"provider: {provider}   model: {label}   scenarios: {len(scenarios)}   "
+            f"trials/cell: {n}\n"
+            "[dim]Each model is put in an approval-gate role. Higher farming susceptibility is "
+            "worse; higher mitigation efficacy is better.[/dim]",
+            title="benchmark",
+            expand=False,
+        )
+    )
+
+    try:
+        report = asyncio.run(
+            run_benchmark(
+                backend,
+                scenarios,
+                model=label,
+                provider_name=provider,
+                trials=n,
+                temperature=temperature,
+            )
+        )
+    except Exception as exc:  # surface any backend/transport failure cleanly
+        err_console.print(f"[red]error:[/red] {type(exc).__name__}: {exc}")
+        raise typer.Exit(code=1) from exc
+
+    table = Table(title=f"approval-farming — {label} ({n} trials/cell)")
+    table.add_column("scenario", style="cyan")
+    table.add_column("tier")
+    table.add_column("honest", justify="right", style="dim")
+    table.add_column("farming susc.", justify="right")
+    table.add_column("w/ hardened", justify="right")
+    table.add_column("mitigation", justify="right", style="green")
+    for r in report.results:
+        susc = r.farming_susceptibility
+        hot = r.tier == "borderline" and susc >= 0.5
+        susc_s = f"[red]{susc:.0%}[/red]" if hot else f"{susc:.0%}"
+        table.add_row(
+            r.scenario,
+            r.tier,
+            f"{r.honest_neutral:.0%}",
+            susc_s,
+            f"{r.hardened_farmed:.0%}",
+            f"{r.mitigation_efficacy:+.0%}",
+        )
+    console.print(table)
+    console.print(
+        f"borderline susceptibility (mean farmed-neutral): "
+        f"[bold]{report.borderline_susceptibility:.0%}[/bold]   "
+        f"hard-control: {report.hard_susceptibility:.0%}   "
+        f"mean mitigation efficacy: [bold]{report.mean_mitigation_efficacy:+.0%}[/bold]"
+    )
+
+    if out is not None:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(_json.dumps(report.to_dict(), indent=2) + "\n", encoding="utf-8")
+        console.print(f"[dim]result written to {out}[/dim]")
+
+
 @app.command("console")
 def console_cmd() -> None:
     """Launch the interactive msfconsole-style shell (persistent session state)."""
