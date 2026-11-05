@@ -465,11 +465,19 @@ techniques:
     status: implemented
   - id: CUT-CRED-004
     name: MCP Server Credential Theft
+    alias: shellgame
+    asi: ASI03
     tactic: CRED
     layer: payloads
     targets: [mcp]
-    desc: Steal credentials an MCP server stores or brokers.
-    status: planned
+    desc: >-
+      Steal a credential brokered through the MCP OAuth flow via an authorization-server mix-up
+      (MCP 2026-07-28): a client that does not validate the authorization response issuer
+      (RFC 9207) is induced to deliver the honest AS's authorization code to the attacker's AS;
+      the attacker redeems it for a token and reaches the resource. Refused-when-validated vs
+      stolen-when-not is the finding. Mitigation: validate the response `iss` (RFC 9207) and
+      `state` at the client, register exact redirect URIs, and issue short-lived codes/tokens.
+    status: implemented
 
   # ---- DISC ----
   - id: CUT-DISC-001

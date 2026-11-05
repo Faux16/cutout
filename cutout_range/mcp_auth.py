@@ -30,14 +30,83 @@ class Token:
     issuer: str  # the authorization server that minted it (RFC 9207)
 
 
+@dataclass(frozen=True, slots=True)
+class AuthCode:
+    """An OAuth authorization code — exchangeable for a token at the AS that issued it."""
+
+    value: str
+    audience: str
+    issuer: str
+
+
+@dataclass(frozen=True, slots=True)
+class AuthResponse:
+    """An authorization response delivered to a client, carrying the code and the ``iss`` of the
+    authorization server that (claims to have) issued it — the field RFC 9207 makes clients
+    validate to detect a mix-up."""
+
+    code: AuthCode
+    iss: str
+
+
 class AuthServer:
-    """Mints audience-bound access tokens (a stand-in for an OAuth 2.1 authorization server)."""
+    """A stand-in OAuth 2.1 authorization server: it mints audience-bound tokens and codes, and
+    (when attacker-controlled) captures codes a confused client hands it."""
 
     def __init__(self, issuer: str = DEFAULT_ISSUER) -> None:
         self.issuer = issuer
+        self.captured: list[AuthCode] = []  # codes delivered to this AS (an attacker's loot)
 
     def mint(self, audience: str) -> Token:
         return Token(value="at_" + secrets.token_hex(8), audience=audience, issuer=self.issuer)
+
+    def authorize(self, audience: str) -> AuthCode:
+        return AuthCode(value="ac_" + secrets.token_hex(8), audience=audience, issuer=self.issuer)
+
+    def redeem(self, code: AuthCode) -> Token | None:
+        """Exchange a code for a token — but only a code THIS server actually issued."""
+        if code.issuer != self.issuer:
+            return None
+        return self.mint(code.audience)
+
+    def receive_code(self, code: AuthCode) -> None:
+        """A client delivered a code here; an attacker-controlled AS records it as loot."""
+        self.captured.append(code)
+
+
+@dataclass(slots=True)
+class Client:
+    """An MCP OAuth client completing an authorization flow it started with ``expected_issuer``.
+
+    ``validate_iss`` (RFC 9207) is the mix-up mitigation: a compliant client rejects an
+    authorization response whose ``iss`` does not match the AS it started the flow with. Without
+    it, an attacker-controlled AS can make the client deliver a code issued by the honest AS to
+    the attacker (an authorization-server mix-up)."""
+
+    expected_issuer: str
+    validate_iss: bool = False
+
+    def complete(self, response: AuthResponse, servers: dict[str, AuthServer]) -> dict[str, Any]:
+        if self.validate_iss and response.iss != self.expected_issuer:
+            return {
+                "ok": False,
+                "rejected": True,
+                "leaked": False,
+                "error": (
+                    f"authorization response issuer '{response.iss}' does not match the "
+                    f"server the flow started with ('{self.expected_issuer}') — mix-up rejected"
+                ),
+            }
+        target = servers.get(response.iss)
+        if target is None:
+            return {"ok": False, "rejected": False, "leaked": False, "error": "unknown issuer"}
+        target.receive_code(response.code)  # send the code where the response says it came from
+        return {
+            "ok": True,
+            "rejected": False,
+            "delivered_to": response.iss,
+            "leaked": response.iss != self.expected_issuer,
+        }
 
 
 @dataclass(slots=True)

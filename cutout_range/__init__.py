@@ -31,6 +31,14 @@ from .guardrail import (
     to_zero_width,
 )
 from .hosts import HostInfo
+from .mcp_auth import (
+    AuthCode,
+    AuthResponse,
+    AuthServer,
+    Client,
+    ResourceServer,
+    Token,
+)
 from .mcp_target import McpTarget
 from .range import Range, connect_range, get_range, reset_ranges
 from .subagent import SubAgent, SubAgentResult
@@ -38,9 +46,12 @@ from .tool_servers import ToolResult, ToolServer, ToolSpec
 
 __all__ = [
     "ApprovalDecision",
+    "AuthCode",
+    "AuthResponse",
     "AuthServer",
     "ChatReply",
     "ChatTarget",
+    "Client",
     "Document",
     "Guardrail",
     "GuardrailVerdict",

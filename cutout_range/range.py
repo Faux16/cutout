@@ -19,7 +19,7 @@ from .chat_target import MockChatAgent
 from .corpus import Document, RagCorpus
 from .guardrail import Guardrail, default_guardrail
 from .hosts import HostInfo
-from .mcp_auth import AuthServer, ResourceServer, Token
+from .mcp_auth import AuthCode, AuthResponse, AuthServer, Client, ResourceServer, Token
 from .memory import MemoryNote
 from .subagent import SubAgent
 from .ticketing import Ticket, TicketQueue
@@ -171,6 +171,10 @@ class Range:
         # token the AS issued — the token-passthrough / confused-deputy flaw, CUT-EXEC-005), and
         # its hardened twin validates audience + issuer (RFC 8707 / RFC 9207) as the control.
         self.auth_server = AuthServer()
+        # An attacker-controlled authorization server — the other AS a client interacts with in an
+        # authorization-server mix-up (CUT-CRED-004). A client that does not validate the response
+        # issuer (RFC 9207) can be made to deliver the honest AS's code here.
+        self.evil_auth_server = AuthServer(issuer="https://evil-as.attacker.example")
         _records = {"id": "VIP-001", "api_secret": "cutrange_FAKE_secret_VIP001_do_not_use"}
         self.resource_servers: dict[str, ResourceServer] = {
             s.id: s
@@ -404,6 +408,36 @@ class Range:
         if server is None:
             return {"ok": False, "error": f"no such resource server '{server_id}'"}
         return server.access(token)
+
+    def issue_auth_code(self, audience: str = "customer-records-api") -> AuthCode:
+        """The honest AS issues an authorization code to the client (the legitimate flow)."""
+        return self.auth_server.authorize(audience)
+
+    def attacker_issuer(self) -> str:
+        """The issuer id of the attacker-controlled authorization server (for a mix-up response)."""
+        return self.evil_auth_server.issuer
+
+    def complete_oauth(self, response: AuthResponse, *, validate_iss: bool) -> dict[str, Any]:
+        """Drive an MCP OAuth client to complete a flow with a delivered authorization response.
+
+        ``validate_iss`` is the RFC 9207 mix-up mitigation. The client started its flow with the
+        honest AS; a compliant client rejects a response whose issuer differs, a vulnerable one
+        delivers the code to whatever AS the response names — the mix-up.
+        """
+        client = Client(expected_issuer=self.auth_server.issuer, validate_iss=validate_iss)
+        servers = {
+            self.auth_server.issuer: self.auth_server,
+            self.evil_auth_server.issuer: self.evil_auth_server,
+        }
+        return client.complete(response, servers)
+
+    def evil_captured(self) -> list[AuthCode]:
+        """Authorization codes the attacker-controlled AS has captured."""
+        return list(self.evil_auth_server.captured)
+
+    def redeem_code(self, code: AuthCode) -> Token | None:
+        """Redeem a (stolen) authorization code at the honest AS that issued it, for a token."""
+        return self.auth_server.redeem(code)
 
     async def send_a2a(
         self, to_agent: str, message: str, message_from: str = "orchestrator"
