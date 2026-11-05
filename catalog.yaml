@@ -109,3 +109,7 @@ techniques:
     name: Code Execution via Interpreter Tool
     tactic: EXEC
     targets: [tool]
+  - id: CUT-EXEC-005
+    name: Confused-Deputy Invocation
+    tactic: EXEC
+    targets: [mcp, tool]

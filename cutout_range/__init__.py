@@ -38,6 +38,7 @@ from .tool_servers import ToolResult, ToolServer, ToolSpec
 
 __all__ = [
     "ApprovalDecision",
+    "AuthServer",
     "ChatReply",
     "ChatTarget",
     "Document",
@@ -51,8 +52,10 @@ __all__ = [
     "OrchestratorResult",
     "RagCorpus",
     "Range",
+    "ResourceServer",
     "SubAgent",
     "SubAgentResult",
+    "Token",
     "ToolResult",
     "ToolServer",
     "ToolSpec",
