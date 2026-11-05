@@ -151,6 +151,30 @@ not `use CUT-EXEC-001` (the ID stays canonical; the alias is the ergonomic handl
 `cutout hunt <mcp-target>` chains recon → `frisk` → drafted findings against a real server, and
 `cutout hunt --targets <file>` surveys a whole corpus into an aggregated coverage table + report.
 
+### Mapped to the OWASP Top 10 for Agentic Applications (2026)
+
+CTX is a kill chain (ATT&CK-style tactics × techniques); the [OWASP Top 10 for Agentic
+Applications](https://genai.owasp.org/) is a risk taxonomy. They're complementary — every
+implemented technique carries an `asi:` tag in [`taxonomy/matrix.yaml`](taxonomy/matrix.yaml)
+and a badge on the [CTX page](https://faux16.github.io/cutout/) mapping it to the ASI risk it
+realizes or enables:
+
+| OWASP ASI risk | Cutout techniques |
+|---|---|
+| **ASI01** Agent Goal Hijack | `coax` · `deaddrop` · `mockingbird` · `walkin` · `smuggler` |
+| **ASI02** Tool Misuse & Exploitation | `casing` · `recce` · `legend` · `puppet` · `heist` |
+| **ASI03** Identity & Privilege Abuse | `keyring` · `proxy` · `ladder` · `scion` · `dragnet` · `siphon` |
+| **ASI04** Agentic Supply Chain | `deepcover` · `turncoat` |
+| **ASI05** Unexpected Code Execution (RCE) | `frisk` · `breakout` |
+| **ASI06** Memory & Context Poisoning | `sleeper` · `revenant` · `handler` · `brushpass` |
+| **ASI07** Insecure Inter-Agent Communication | `cartograph` · `vouch` · `courier` · `letterbox` |
+| **ASI08** Cascading Failures | `contagion` |
+| **ASI09** Human-Agent Trust Exploitation | `nod` *(and the [approval-farming benchmark](benchmarks/approval_farming/))* |
+| **ASI10** Rogue Agents | *(planned)* |
+
+Cutout's post-exploitation stages (recon, discovery, collection, exfiltration) are the
+operational steps that *carry out* these risks — depth the risk list doesn't enumerate.
+
 ## Against a real model, not just the range
 
 Modules prove a technique against the deterministic range; the harder question is whether it

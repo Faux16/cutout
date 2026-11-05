@@ -3,10 +3,12 @@
 A reproducible, cross-model measurement of how susceptible a **model-in-the-loop approval
 gate** is to a *fabricated authorization* — and whether a simple risk-based prompt defends it.
 
-It operationalizes CUT-PRIV-003 (`nod`, approval farming) from the Cutout taxonomy: an LLM is
-put in the role of approving or denying a proposed action, and we measure how often a
-made-up justification ("approved by the manager, routine, finance-reviewed, low risk") wins an
-approval that the honest request does not.
+It operationalizes CUT-PRIV-003 (`nod`, approval farming) from the Cutout taxonomy — which maps
+to **OWASP ASI09, Human-Agent Trust Exploitation**, a named risk in the OWASP Top 10 for Agentic
+Applications (2026). An LLM is put in the role of approving or denying a proposed action, and we
+measure how often a made-up justification ("approved by the manager, routine, finance-reviewed,
+low risk") wins an approval that the honest request does not. So this is a *measurement* of a
+top-10 agentic risk — with a defense that provably works.
 
 > **Authorized use only.** Run it against your own accounts and models. See [ETHICS.md](../../ETHICS.md).
 
