@@ -219,11 +219,19 @@ techniques:
     status: implemented
   - id: CUT-EXEC-005
     name: Confused-Deputy Invocation
+    alias: standin
+    asi: ASI03
     tactic: EXEC
     layer: payloads
     targets: [mcp, tool]
-    desc: Make a privileged component act on the attacker's behalf.
-    status: planned
+    desc: >-
+      Make a privileged component act on the attacker's behalf by exploiting the MCP 2026-07-28
+      token model: a resource server that accepts a token not issued for it (no RFC 8707 audience
+      validation) honors a token minted for another resource — the confused-deputy / token-
+      passthrough flaw. Refused-when-validated vs granted-when-not, for the same token, is the
+      finding. Mitigation: validate token audience (RFC 8707) and issuer (RFC 9207), never pass a
+      client's token upstream, and issue short-lived resource-bound tokens.
+    status: implemented
 
   # ---- PERS (differentiator) ----
   - id: CUT-PERS-001
