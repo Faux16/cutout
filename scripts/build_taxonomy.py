@@ -37,6 +37,21 @@ TACTIC_NAMES = {
     "IMP": "Impact",
 }
 
+# OWASP Top 10 for Agentic Applications (2026) — each implemented technique carries an `asi`
+# field in the matrix mapping it to the risk it realizes or enables.
+ASI_TITLES = {
+    "ASI01": "Agent Goal Hijack",
+    "ASI02": "Tool Misuse & Exploitation",
+    "ASI03": "Identity & Privilege Abuse",
+    "ASI04": "Agentic Supply Chain Vulnerabilities",
+    "ASI05": "Unexpected Code Execution (RCE)",
+    "ASI06": "Memory & Context Poisoning",
+    "ASI07": "Insecure Inter-Agent Communication",
+    "ASI08": "Cascading Failures",
+    "ASI09": "Human-Agent Trust Exploitation",
+    "ASI10": "Rogue Agents",
+}
+
 _CSS = """
 :root {
   color-scheme: light dark;
@@ -87,6 +102,9 @@ h1 .accent { color: var(--accent); }
   font-size: 11px; color: var(--ok-ink); background: var(--ok-line);
   padding: 0 6px; border-radius: 999px; }
 .cell .tag { font-size: 11px; color: var(--plan-ink); }
+.cell .asi { display: inline-block; margin-left: 6px; font-family: ui-monospace, Menlo, monospace;
+  font-size: 10px; color: var(--muted); border: 1px solid var(--line);
+  padding: 0 5px; border-radius: 999px; vertical-align: middle; }
 footer { max-width: 1200px; margin: 0 auto; padding: 8px 24px 40px;
   color: var(--muted); font-size: 12px; border-top: 1px solid var(--line); }
 footer a { color: var(--accent); }
@@ -104,11 +122,17 @@ def _cell(t: dict) -> str:
         if impl and t.get("alias")
         else ('<span class="alias">impl</span>' if impl else '<span class="tag">planned</span>')
     )
+    asi = str(t.get("asi") or "")
+    asi_badge = ""
+    if asi:
+        asi_badge = f'<span class="asi" title="OWASP {asi}: {ASI_TITLES.get(asi, "")}">{asi}</span>'
     tip = f"{desc}  ·  targets: {html.escape(targets)}" if targets else desc
+    if asi:
+        tip = f"{tip}  ·  OWASP {asi}: {html.escape(ASI_TITLES.get(asi, ''))}"
     return (
         f'<div class="cell {"ok" if impl else ""}" title="{tip}">'
         f'<div class="id">{tid}</div>'
-        f'<div class="tname">{name}</div>{badge}</div>'
+        f'<div class="tname">{name}</div>{badge}{asi_badge}</div>'
     )
 
 
@@ -155,6 +179,8 @@ def render(matrix: dict) -> str:
   <div class="legend">
     <span><span class="dot ok"></span>implemented (runnable module)</span>
     <span><span class="dot plan"></span>planned</span>
+    <span>the <span class="asi">ASI0x</span> tag maps each technique to its OWASP Top 10 for
+      Agentic Applications (2026) risk</span>
     <span>hover a cell for its description</span>
   </div>
 </header>

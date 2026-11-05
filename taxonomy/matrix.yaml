@@ -30,6 +30,7 @@ techniques:
   # ---- RECON ----
   - id: CUT-RECON-001
     name: Tool & Schema Enumeration
+    asi: ASI02
     alias: casing
     tactic: RECON
     layer: recon
@@ -38,6 +39,7 @@ techniques:
     status: implemented
   - id: CUT-RECON-002
     name: Agent Topology Mapping
+    asi: ASI07
     alias: cartograph
     tactic: RECON
     layer: recon
@@ -86,6 +88,7 @@ techniques:
   # ---- INJ (Initial Injection) ----
   - id: CUT-INJ-001
     name: Direct Prompt Injection
+    asi: ASI01
     alias: coax
     tactic: INJ
     layer: delivery
@@ -101,6 +104,7 @@ techniques:
     status: implemented
   - id: CUT-INJ-002
     name: Indirect Injection via RAG/Document
+    asi: ASI01
     alias: deaddrop
     tactic: INJ
     layer: delivery
@@ -109,6 +113,7 @@ techniques:
     status: implemented
   - id: CUT-INJ-003
     name: Indirect Injection via Tool Output
+    asi: ASI01
     alias: mockingbird
     tactic: INJ
     layer: delivery
@@ -129,6 +134,7 @@ techniques:
     status: planned
   - id: CUT-INJ-005
     name: Task-Queue / Ticket / Email Injection
+    asi: ASI01
     alias: walkin
     tactic: INJ
     layer: delivery
@@ -148,6 +154,7 @@ techniques:
     status: implemented
   - id: CUT-INJ-006
     name: Tool-Description Injection
+    asi: ASI02
     alias: legend
     tactic: INJ
     layer: delivery
@@ -175,6 +182,7 @@ techniques:
   # ---- EXEC ----
   - id: CUT-EXEC-001
     name: Coerced Tool Invocation
+    asi: ASI02
     alias: puppet
     tactic: EXEC
     layer: payloads
@@ -197,6 +205,7 @@ techniques:
     status: planned
   - id: CUT-EXEC-004
     name: Code Execution via Interpreter Tool
+    asi: ASI05
     alias: breakout
     tactic: EXEC
     layer: payloads
@@ -219,6 +228,7 @@ techniques:
   # ---- PERS (differentiator) ----
   - id: CUT-PERS-001
     name: RAG / Vector-Store Implant
+    asi: ASI06
     alias: sleeper
     tactic: PERS
     layer: persistence
@@ -227,6 +237,7 @@ techniques:
     status: implemented
   - id: CUT-PERS-002
     name: Conversation-Memory Implant
+    asi: ASI06
     alias: revenant
     tactic: PERS
     layer: persistence
@@ -238,6 +249,7 @@ techniques:
     status: implemented
   - id: CUT-PERS-003
     name: Poisoned Instruction File
+    asi: ASI06
     alias: handler
     tactic: PERS
     layer: persistence
@@ -249,6 +261,7 @@ techniques:
     status: implemented
   - id: CUT-PERS-004
     name: Persistent Tool-Description Poison
+    asi: ASI04
     alias: deepcover
     tactic: PERS
     layer: persistence
@@ -273,6 +286,7 @@ techniques:
     status: planned
   - id: CUT-PERS-006
     name: Rug-Pull Tool
+    asi: ASI04
     alias: turncoat
     tactic: PERS
     layer: persistence
@@ -295,6 +309,7 @@ techniques:
   # ---- PRIV (delegation abuse) ----
   - id: CUT-PRIV-001
     name: Delegated-Token Abuse
+    asi: ASI03
     alias: proxy
     tactic: PRIV
     layer: lateral
@@ -310,6 +325,7 @@ techniques:
     status: implemented
   - id: CUT-PRIV-002
     name: Scope Escalation via Chaining
+    asi: ASI03
     alias: ladder
     tactic: PRIV
     layer: lateral
@@ -323,6 +339,7 @@ techniques:
     status: implemented
   - id: CUT-PRIV-003
     name: Approval Farming (HITL)
+    asi: ASI09
     alias: nod
     tactic: PRIV
     layer: lateral
@@ -338,6 +355,7 @@ techniques:
     status: implemented
   - id: CUT-PRIV-004
     name: Cross-Agent Trust Exploitation
+    asi: ASI07
     alias: vouch
     tactic: PRIV
     layer: lateral
@@ -353,6 +371,7 @@ techniques:
     status: implemented
   - id: CUT-PRIV-005
     name: Privileged Sub-Agent Spawning
+    asi: ASI03
     alias: scion
     tactic: PRIV
     layer: lateral
@@ -370,6 +389,7 @@ techniques:
   # ---- EVAS ----
   - id: CUT-EVAS-001
     name: Guardrail Bypass / Jailbreak Encoding
+    asi: ASI01
     alias: smuggler
     tactic: EVAS
     layer: payloads
@@ -426,6 +446,7 @@ techniques:
     status: planned
   - id: CUT-CRED-003
     name: Environment / Config Exfil
+    asi: ASI03
     alias: keyring
     tactic: CRED
     layer: payloads
@@ -445,6 +466,7 @@ techniques:
   # ---- DISC ----
   - id: CUT-DISC-001
     name: Post-Access Tool Discovery
+    asi: ASI02
     alias: recce
     tactic: DISC
     layer: recon
@@ -470,6 +492,7 @@ techniques:
     status: planned
   - id: CUT-DISC-004
     name: Resource / Filesystem Discovery
+    asi: ASI05
     alias: frisk
     tactic: DISC
     layer: recon
@@ -486,6 +509,7 @@ techniques:
   # ---- LAT ----
   - id: CUT-LAT-001
     name: Agent-to-Agent Propagation
+    asi: ASI07
     alias: courier
     tactic: LAT
     layer: lateral
@@ -494,6 +518,7 @@ techniques:
     status: implemented
   - id: CUT-LAT-002
     name: Shared-Memory Pivot
+    asi: ASI06
     alias: brushpass
     tactic: LAT
     layer: lateral
@@ -502,6 +527,7 @@ techniques:
     status: implemented
   - id: CUT-LAT-003
     name: Shared-Queue / Message-Bus Pivot
+    asi: ASI07
     alias: letterbox
     tactic: LAT
     layer: lateral
@@ -534,6 +560,7 @@ techniques:
     status: planned
   - id: CUT-LAT-006
     name: Self-Propagating Agent Worm
+    asi: ASI08
     alias: contagion
     tactic: LAT
     layer: lateral
@@ -564,6 +591,7 @@ techniques:
     status: planned
   - id: CUT-COLL-003
     name: Tool-Output Aggregation
+    asi: ASI03
     alias: dragnet
     tactic: COLL
     layer: payloads
@@ -576,6 +604,7 @@ techniques:
   # ---- EXFIL ----
   - id: CUT-EXFIL-001
     name: Outbound Tool-Call Exfil
+    asi: ASI03
     alias: siphon
     tactic: EXFIL
     layer: payloads
@@ -614,6 +643,7 @@ techniques:
   # ---- IMP ----
   - id: CUT-IMP-001
     name: Unauthorized Action / Transaction
+    asi: ASI02
     alias: heist
     tactic: IMP
     layer: payloads
