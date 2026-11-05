@@ -61,6 +61,10 @@ techniques:
     name: Environment / Config Exfil
     tactic: CRED
     targets: [tool]
+  - id: CUT-CRED-004
+    name: MCP Server Credential Theft
+    tactic: CRED
+    targets: [mcp]
   - id: CUT-COLL-003
     name: Tool-Output Aggregation
     tactic: COLL

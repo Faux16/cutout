@@ -131,6 +131,7 @@ not `use CUT-EXEC-001` (the ID stays canonical; the alias is the ergonomic handl
 | `breakout` | `CUT-EXEC-004` | Execution | Weaponize a code-interpreter tool: read files, dump env, run commands, harvest creds |
 | `standin` | `CUT-EXEC-005` | Execution | Confused deputy via token audience confusion (MCP 2026-07-28): replay a token minted for one resource against a server that skips RFC 8707 audience validation |
 | `keyring` | `CUT-CRED-003` | Credential Access | Read `.env`/config via the agent's delegated token |
+| `shellgame` | `CUT-CRED-004` | Credential Access | MCP OAuth authorization-server mix-up (MCP 2026-07-28): a client that skips RFC 9207 issuer validation leaks the honest AS's code to the attacker, who redeems it for a token |
 | `sleeper` | `CUT-PERS-001` | Persistence | Durable RAG implant that re-triggers on any query |
 | `revenant` | `CUT-PERS-002` | Persistence | Memory implant — re-fires on every agent cycle from one write |
 | `handler` | `CUT-PERS-003` | Persistence | Poisoned instruction file — fires on every future task |
@@ -148,7 +149,7 @@ not `use CUT-EXEC-001` (the ID stays canonical; the alias is the ergonomic handl
 | `smuggler` | `CUT-EVAS-001` | Defense Evasion | Encode a directive (base64 / zero-width / homoglyph) past a raw-text guardrail |
 | `rollcall` | `CUT-INV-001` | (plumbing) | Session inventory reference stub |
 
-**26 modules, every tactic** — `cutout catalog` shows the live implemented/planned split;
+**27 modules, every tactic** — `cutout catalog` shows the live implemented/planned split;
 `cutout hunt <mcp-target>` chains recon → `frisk` → drafted findings against a real server, and
 `cutout hunt --targets <file>` surveys a whole corpus into an aggregated coverage table + report.
 
@@ -164,7 +165,7 @@ realizes or enables:
 |---|---|
 | **ASI01** Agent Goal Hijack | `coax` · `deaddrop` · `mockingbird` · `walkin` · `smuggler` |
 | **ASI02** Tool Misuse & Exploitation | `casing` · `recce` · `legend` · `puppet` · `heist` |
-| **ASI03** Identity & Privilege Abuse | `keyring` · `proxy` · `ladder` · `scion` · `dragnet` · `siphon` · `standin` |
+| **ASI03** Identity & Privilege Abuse | `keyring` · `proxy` · `ladder` · `scion` · `dragnet` · `siphon` · `standin` · `shellgame` |
 | **ASI04** Agentic Supply Chain | `deepcover` · `turncoat` |
 | **ASI05** Unexpected Code Execution (RCE) | `frisk` · `breakout` |
 | **ASI06** Memory & Context Poisoning | `sleeper` · `revenant` · `handler` · `brushpass` |
