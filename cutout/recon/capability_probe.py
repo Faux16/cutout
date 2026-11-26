@@ -12,6 +12,14 @@ target (a real server or the bundled range), classify candidate tools and probe:
   option, confirmation is *definitive* instead of heuristic: plant a benign canary file
   holding a random token, read it back through the tool, and confirm only if that exact
   token returns — proof of file read that still touches no real data.
+* **Path containment escape (prefix collision)** — a filesystem server that confines reads
+  to an allowed root but checks containment with a bare string ``startsWith`` (no path
+  boundary) lets a *sibling* directory sharing that root's prefix escape the sandbox
+  (``/srv/jail`` allowed -> ``/srv/jail-secrets/`` readable: the CVE-2025-53110 class). In
+  ``canary`` mode frisk discovers the allowed root from the server's own denial message,
+  plants a benign canary in a sibling that shares the prefix, and confirms the escape by
+  reading its token back (or by a differential: a clearly-outside path is denied while the
+  sibling-prefix path is not). The sibling and canary are removed afterwards.
 * **SSRF** — outbound-fetch tools. Probe loopback (a closed high port) and TEST-NET-1
   (RFC 5737, reserved/unroutable): reaching either means no egress filtering — a
   server-side request forgery sink. Cloud metadata is deliberately *not* auto-probed.
@@ -30,7 +38,9 @@ from __future__ import annotations
 
 import contextlib
 import inspect
+import re
 import secrets
+import shutil
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
@@ -48,7 +58,59 @@ from cutout.engine.session import CheckResult, RunResult, Session
 _SQL_PARAMS = {"sql", "query", "statement", "q"}
 _SQL_WORDS = {"sql", "query", "duckdb", "sqlite", "database", "select"}
 _PATH_PARAMS = {"path", "file", "filename", "filepath", "file_path", "src"}
+# Array-valued path params (a tool that takes a *list* of paths, e.g. read_files(paths=[…])).
+# Flattened schemas lose the array type, so match by the common plural names and pass a
+# single-element list when probing.
+_PATH_ARRAY_PARAMS = {"paths", "files", "filenames", "filepaths", "sources"}
 _PATH_WORDS = {"read_file", "readfile", "file", "path", "filesystem", "read a file"}
+
+# Patterns that extract an allowed-root directory from a server's own containment-denial
+# message (filesystem servers routinely leak it: "… path outside allowed directories:
+# /x not in /srv/jail"). Used to aim the prefix-collision probe at a real sibling.
+_ROOT_PATTERNS = (
+    re.compile(r"not in\s+(/[^\s,'\"\]]+)", re.IGNORECASE),
+    re.compile(r"allowed director(?:y|ies)[:\s]*\[?['\"]?(/[^\s,'\"\]]+)", re.IGNORECASE),
+    re.compile(r"must be within\s+(/[^\s,'\"\]]+)", re.IGNORECASE),
+    re.compile(r"outside (?:of )?the allowed .*?\b(/[^\s,'\"\]]+)", re.IGNORECASE),
+)
+# Markers that a result refused a path on containment grounds (used by the prefix-collision
+# differential: a clearly-outside control is denied, so a sibling that is *not* denied escaped).
+_CONTAINMENT_MARKERS = (
+    "outside allowed",
+    "outside the allowed",
+    "outside of the allowed",
+    "not in ",
+    "access denied",
+    "not allowed",
+    "path traversal",
+    "denied -",
+)
+
+
+def _discover_allowed_root(text: str) -> str | None:
+    """Parse an allowed-root directory out of a server's containment-denial message."""
+    for pat in _ROOT_PATTERNS:
+        m = pat.search(text or "")
+        if m:
+            root = m.group(1).rstrip("/")
+            if root and root != "/" and len(Path(root).parts) > 2:
+                return root
+    return None
+
+
+def _is_containment_denial(text: str) -> bool:
+    low = (text or "").lower()
+    return any(m in low for m in _CONTAINMENT_MARKERS)
+
+
+def _is_array_path(key: str) -> bool:
+    return key.lower() in _PATH_ARRAY_PARAMS
+
+
+def _path_arg(key: str, value: str) -> dict[str, Any]:
+    """Build the call arg for a path param — a single-element list for array params."""
+    return {key: [value]} if _is_array_path(key) else {key: value}
+
 
 # DuckDB file-reading table functions to try inside a SELECT. read_text/read_blob are the
 # ones real denylists forget; read_csv is the "usually blocked" control.
@@ -178,7 +240,7 @@ def _sql_param(spec: Any) -> str | None:
 
 def _path_param(spec: Any) -> str | None:
     for key in spec.params or {}:
-        if str(key).lower() in _PATH_PARAMS:
+        if str(key).lower() in _PATH_PARAMS or str(key).lower() in _PATH_ARRAY_PARAMS:
             return str(key)
     return None
 
@@ -338,7 +400,11 @@ class FilesystemDiscovery(BaseModule):
         out: list[tuple[Any, str | None, str | None, str | None, str | None]] = []
         for spec in specs:
             sql = _sql_param(spec) if _has_signal(spec, _SQL_PARAMS, _SQL_WORDS) else None
-            path = _path_param(spec) if _has_signal(spec, _PATH_PARAMS, _PATH_WORDS) else None
+            path = (
+                _path_param(spec)
+                if _has_signal(spec, _PATH_PARAMS | _PATH_ARRAY_PARAMS, _PATH_WORDS)
+                else None
+            )
             fetch = _fetch_param(spec) if _has_signal(spec, _FETCH_PARAMS, _FETCH_WORDS) else None
             cmd = _exec_param(spec) if _has_signal(spec, _EXEC_PARAMS, _EXEC_WORDS) else None
             if sql or path or fetch or cmd:
@@ -475,10 +541,12 @@ class FilesystemDiscovery(BaseModule):
                     )
 
             # 2) Path file-read: hand the tool a made-up path directly.
+            control_text = ""
             if path_key and not any(f["tool"] == qualified for f in findings):
-                res = await self._call(rng, spec.name, {path_key: probe_path})
-                hit = canary_token is not None and canary_token in _envelope_text(res)
-                verdict = "reachable" if hit else _classify(_envelope_text(res))
+                res = await self._call(rng, spec.name, _path_arg(path_key, probe_path))
+                control_text = _envelope_text(res)
+                hit = canary_token is not None and canary_token in control_text
+                verdict = "reachable" if hit else _classify(control_text)
                 await self.emit(
                     Phase.RUN,
                     "frisk.probe",
@@ -508,6 +576,19 @@ class FilesystemDiscovery(BaseModule):
                             ),
                         }
                     )
+
+            # 2b) Path containment escape (prefix collision, CVE-2025-53110 class). The
+            #     control above denied an out-of-root path; if that denial leaks the allowed
+            #     root, plant a canary in a sibling sharing the root's prefix and confirm the
+            #     boundary is missing. Plants a local file, so only in canary mode.
+            if (
+                path_key
+                and canary_token is not None
+                and not any(f["tool"] == qualified for f in findings)
+            ):
+                pf = await self._prefix_collision_probe(rng, spec, path_key, control_text)
+                if pf is not None:
+                    findings.append(pf)
 
             # 3) SSRF: will an outbound-fetch tool reach internal / arbitrary hosts?
             #    Probe loopback (internal services) and TEST-NET (arbitrary external) —
@@ -582,3 +663,80 @@ class FilesystemDiscovery(BaseModule):
                         break  # one confirmed exec vector per tool is enough
 
         return findings
+
+    async def _prefix_collision_probe(
+        self, rng: Any, spec: Any, path_key: str, control_text: str
+    ) -> dict[str, Any] | None:
+        """Confirm a prefix-collision containment escape (CVE-2025-53110 class).
+
+        Discover the allowed root from the server's own denial, plant a benign canary in a
+        *sibling* directory sharing that root's string prefix, and read it back through the
+        tool. A returned token (or a non-denial where a clearly-outside control was denied)
+        proves the containment check lacks a path boundary. The sibling is removed afterwards.
+        """
+        qualified = spec.qualified()
+        root = _discover_allowed_root(control_text)
+        if not root:
+            return None
+        parent = Path(root).parent
+        token = secrets.token_hex(16)
+        # A sibling sharing the root's prefix: /srv/jail -> /srv/jail-cutoutprobe-xxxx
+        sibling = parent / f"{Path(root).name}-cutoutprobe-{token[:8]}"
+        canary = sibling / "canary.txt"
+        content = f"{_CANARY_PREFIX}::{token}"
+        try:
+            sibling.mkdir(parents=True, exist_ok=False)
+            canary.write_text(content, encoding="utf-8")
+        except OSError:
+            shutil.rmtree(sibling, ignore_errors=True)
+            return None
+
+        verdict, confirmed, hit = "inconclusive", "", False
+        try:
+            res = await self._call(rng, spec.name, _path_arg(path_key, str(canary)))
+            text = _envelope_text(res)
+            hit = token in text
+            if hit:
+                verdict, confirmed = "reachable", "canary"
+            elif _is_containment_denial(text):
+                verdict = "defended"
+            elif res.get("ok"):
+                verdict, confirmed = "reachable", "differential"
+        except Exception:
+            verdict = "inconclusive"
+        finally:
+            shutil.rmtree(sibling, ignore_errors=True)
+
+        await self.emit(
+            Phase.RUN,
+            "frisk.probe",
+            {
+                "tool": qualified,
+                "vector": f"path-prefix:{path_key}",
+                "verdict": verdict,
+                "canary": hit,
+                "allowed_root": root,
+            },
+        )
+        if verdict != "reachable":
+            return None
+        confirm = (
+            " Confirmed: the tool returned the planted canary's token from the sibling path."
+            if confirmed == "canary"
+            else " Confirmed by differential: a clearly-outside path was denied, the "
+            "sibling-prefix path was not."
+        )
+        return {
+            "tool": qualified,
+            "capability": "path containment escape (prefix collision)",
+            "vector": f"{path_key}=<allowed-root>-SUFFIX/…  (sibling sharing the root prefix)",
+            "allowed_root": root,
+            "severity": "high",
+            "confirmed": confirmed,
+            "detail": (
+                f"the server confines file access to {root!r} with a prefix check that lacks a "
+                f"path boundary, so a sibling sharing that prefix (e.g. {root}-x/) escapes the "
+                "sandbox — arbitrary file access outside the allowed directory (CWE-22 "
+                f"incomplete path containment, CVE-2025-53110 class).{confirm}"
+            ),
+        }

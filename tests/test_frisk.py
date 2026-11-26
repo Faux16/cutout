@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 from uuid import uuid4
 
@@ -11,7 +12,11 @@ from cutout.engine import Engine, Session, TargetDescriptor
 from cutout.recon.capability_probe import (
     FilesystemDiscovery,
     _classify,
+    _discover_allowed_root,
     _exec_verdict,
+    _is_array_path,
+    _is_containment_denial,
+    _path_arg,
     _plant_canary,
     _sql_verdict,
     _ssrf_verdict,
@@ -184,3 +189,115 @@ async def test_frisk_skips_when_no_candidates() -> None:
             return "s.ping"
 
     assert mod._candidates([_Spec()]) == []
+
+
+# --- prefix-collision probe (CVE-2025-53110 class) -------------------------------------
+
+
+def test_discover_allowed_root_parses_denial_strings() -> None:
+    assert (
+        _discover_allowed_root(
+            "Access denied - path outside allowed directories: /x not in /srv/jail"
+        )
+        == "/srv/jail"
+    )
+    assert _discover_allowed_root("Allowed directories: ['/home/me/work']") == "/home/me/work"
+    assert _discover_allowed_root("must be within /data/share/") == "/data/share"
+    # Nothing to parse / a bare root is ignored.
+    assert _discover_allowed_root("some unrelated error") is None
+    assert _discover_allowed_root("not in /") is None
+
+
+def test_containment_and_array_helpers() -> None:
+    assert _is_containment_denial("path outside allowed directories") is True
+    assert _is_containment_denial("file read ok") is False
+    assert _is_array_path("paths") is True
+    assert _is_array_path("path") is False
+    assert _path_arg("paths", "/f") == {"paths": ["/f"]}
+    assert _path_arg("path", "/f") == {"path": "/f"}
+
+
+def _array_path_spec() -> object:
+    class _Spec:
+        server = "stdio-server"
+        name = "read_files"
+        description = "Files to read. Each item is a plain path string."
+        params = {"paths": "str", "limit": "str"}
+
+        def qualified(self) -> str:
+            return "stdio-server.read_files"
+
+    return _Spec()
+
+
+def test_candidates_detect_array_path_param() -> None:
+    # read_files exposes `paths` (an array path param) — frisk must treat it as a path tool.
+    cands = FilesystemDiscovery()._candidates([_array_path_spec()])
+    assert len(cands) == 1
+    _spec, _sql, path_key, _fetch, _cmd = cands[0]
+    assert path_key == "paths"
+
+
+class _FakeFsServer:
+    """A filesystem server whose containment check is the buggy bare ``startswith`` (no path
+    boundary) — the CVE-2025-53110 shape. Reads real files so the probe's planted canary is
+    genuinely returned. ``secure=True`` adds the missing boundary."""
+
+    def __init__(self, root: str, *, secure: bool = False) -> None:
+        self.root = root
+        self.secure = secure
+
+    def _allowed(self, p: str) -> bool:
+        if self.secure:
+            return p == self.root or p.startswith(self.root + os.sep)
+        return p.startswith(self.root)  # the bug
+
+    def call_tool(self, name: str, args: dict[str, object]) -> dict[str, object]:
+        raw = args.get("path")
+        if raw is None and isinstance(args.get("paths"), list):
+            raw = args["paths"][0]
+        p = str(raw)
+        if not self._allowed(p):
+            msg = f"Access denied - path outside allowed directories: {p} not in {self.root}"
+            return {"ok": True, "tool": name, "text": msg}
+        try:
+            with open(p, encoding="utf-8") as fh:
+                return {"ok": True, "tool": name, "text": fh.read()}
+        except OSError as exc:
+            return {"ok": True, "tool": name, "text": f"no such file: {exc}"}
+
+
+async def test_prefix_collision_probe_confirms_escape(tmp_path: Path) -> None:
+    root = str(tmp_path / "jail")
+    os.mkdir(root)
+    server = _FakeFsServer(root)
+    mod = FilesystemDiscovery()
+    control = f"Access denied - path outside allowed directories: /etc/hostname not in {root}"
+    finding = await mod._prefix_collision_probe(server, _array_path_spec(), "paths", control)
+
+    assert finding is not None
+    assert finding["capability"] == "path containment escape (prefix collision)"
+    assert finding["confirmed"] == "canary"
+    assert finding["allowed_root"] == root
+    assert finding["severity"] == "high"
+    # The probe cleaned up after itself: no sibling dir left behind.
+    leftovers = [p for p in (tmp_path).iterdir() if p.name.startswith("jail-cutoutprobe-")]
+    assert leftovers == []
+
+
+async def test_prefix_collision_probe_defended_server_no_finding(tmp_path: Path) -> None:
+    root = str(tmp_path / "jail")
+    os.mkdir(root)
+    server = _FakeFsServer(root, secure=True)  # proper boundary check
+    mod = FilesystemDiscovery()
+    control = f"Access denied - path outside allowed directories: /etc/hostname not in {root}"
+    finding = await mod._prefix_collision_probe(server, _array_path_spec(), "paths", control)
+    assert finding is None
+
+
+async def test_prefix_collision_probe_skips_without_discoverable_root(tmp_path: Path) -> None:
+    server = _FakeFsServer(str(tmp_path))
+    mod = FilesystemDiscovery()
+    # No allowed-root leaked in the control text -> nothing to aim at -> no finding, no writes.
+    finding = await mod._prefix_collision_probe(server, _array_path_spec(), "paths", "opaque error")
+    assert finding is None
