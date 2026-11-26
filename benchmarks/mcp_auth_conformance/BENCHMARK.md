@@ -79,13 +79,32 @@ model does not apply) and excluded from the rate denominators.
 ## Run it
 
 ```bash
-cutout auth-conformance                 # render the table + rates
+cutout auth-conformance                 # score the offline corpus (table + rates)
 cutout auth-conformance --out out.json  # write the structured result
 cutout auth-conformance --transcript runs/authconf.jsonl   # per-fixture evidence cells
 ```
 
-Offline, deterministic, runs in milliseconds — the kiosk constraint. A live `--target mcp://…`
-probe (authorized servers only) is a fast-follow.
+Offline, deterministic, runs in milliseconds — the kiosk constraint.
+
+### Live probe (authorized servers only)
+
+`--target` probes one **running, authorized** MCP server for the *observable* half of
+conformance — benignly and, by default, without credentials:
+
+```bash
+cutout auth-conformance --target https://mcp.example/mcp          # RFC 9728 discovery + RFC 6750/MCP challenge
+cutout auth-conformance --target mcp://mcp.example/mcp \
+    --token "$MINE" --foreign-token "$FOR_ANOTHER_RESOURCE"       # also test the audience/issuer binding
+```
+
+The unauthenticated checks (does it serve `.well-known/oauth-protected-resource`? does an
+unauthenticated call get a `401` + `WWW-Authenticate: …resource_metadata`? is auth required at
+all?) need no credentials. The audience/issuer **binding** cannot be tested without a
+validly-signed token the server's IdP would accept — so when you supply `--foreign-token` (a
+token you are authorized to use that was issued for *another* audience/issuer), its acceptance
+is a live confused-deputy finding; `--token` is the valid-path control. Cutout never mints,
+phishes, or guesses a token. Tokens may also come from `CUTOUT_TARGET_TOKEN` /
+`CUTOUT_TARGET_FOREIGN_TOKEN` to keep them out of shell history. Authorized use only (ETHICS.md).
 
 ## Defender guidance
 

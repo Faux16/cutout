@@ -224,7 +224,9 @@ not "servers can't check `aud`" — most can — but that the check is often **o
 exposed one ships the check off (`require_audience=False`, `verify_aud` unset, the SDK's
 `validate_resource=False`) rather than lacking it. The class is public (CVE-2026-111771); the
 **default-secure prevalence** is the new, defender-actionable measurement. `cutout
-auth-conformance` runs it offline in milliseconds.
+auth-conformance` runs the corpus offline in milliseconds, and `--target` live-probes one
+authorized running server (RFC 9728 discovery + RFC 6750/MCP challenge, and — with an
+operator-supplied foreign token — the audience/issuer binding itself).
 
 ## Findings in the wild
 
