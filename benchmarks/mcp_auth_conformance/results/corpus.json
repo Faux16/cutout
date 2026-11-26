@@ -1,0 +1,364 @@
+{
+  "benchmark": "mcp-auth-conformance",
+  "version": 1,
+  "summary": {
+    "fixtures": 17,
+    "audience_testable": 11,
+    "audience_default_secure_rate": 0.545,
+    "issuer_testable": 3,
+    "issuer_default_secure_rate": 1.0,
+    "audience_distribution": {
+      "enforced": 6,
+      "opt-in": 5,
+      "na": 6
+    },
+    "issuer_distribution": {
+      "enforced": 3,
+      "unknown": 8,
+      "na": 6
+    },
+    "instrument_valid": true
+  },
+  "fixtures": [
+    {
+      "name": "julep-ai/julep",
+      "kind": "hand-rolled-jwt",
+      "source": "julep-ai/julep:julep/mcp_auth.py (jwt.decode audience=\u2026, options require [iss, aud], EdDSA)",
+      "note": "",
+      "audience": {
+        "mode": "enforced",
+        "testable": true,
+        "granted_by_default": false,
+        "default_secure": true,
+        "control_denied": true
+      },
+      "issuer": {
+        "mode": "enforced",
+        "testable": true,
+        "granted_by_default": false,
+        "default_secure": true,
+        "control_denied": true
+      }
+    },
+    {
+      "name": "osmanuygar/sqlatte",
+      "kind": "hand-rolled-jwt",
+      "source": "osmanuygar/sqlatte:src/api/mcp_oauth.py (JWKS; audience=\u2026, options require [exp, iss, aud])",
+      "note": "",
+      "audience": {
+        "mode": "enforced",
+        "testable": true,
+        "granted_by_default": false,
+        "default_secure": true,
+        "control_denied": true
+      },
+      "issuer": {
+        "mode": "enforced",
+        "testable": true,
+        "granted_by_default": false,
+        "default_secure": true,
+        "control_denied": true
+      }
+    },
+    {
+      "name": "asaotomo/FofaMap",
+      "kind": "hand-rolled-jwt",
+      "source": "asaotomo/FofaMap:mcp_server.py (jwt.decode audience=\u2026, RS256/ES256)",
+      "note": "",
+      "audience": {
+        "mode": "enforced",
+        "testable": true,
+        "granted_by_default": false,
+        "default_secure": true,
+        "control_denied": true
+      },
+      "issuer": {
+        "mode": "unknown",
+        "testable": false,
+        "granted_by_default": null,
+        "default_secure": null,
+        "control_denied": null
+      }
+    },
+    {
+      "name": "DAWNCR0W/affine-mcp-server",
+      "kind": "hand-rolled-jwt",
+      "source": "DAWNCR0W/affine-mcp-server:src/oauth.ts (jwtVerify audience: buildAudienceList, JWKS)",
+      "note": "",
+      "audience": {
+        "mode": "enforced",
+        "testable": true,
+        "granted_by_default": false,
+        "default_secure": true,
+        "control_denied": true
+      },
+      "issuer": {
+        "mode": "unknown",
+        "testable": false,
+        "granted_by_default": null,
+        "default_secure": null,
+        "control_denied": null
+      }
+    },
+    {
+      "name": "neondatabase/neon-pkgs",
+      "kind": "library",
+      "source": "neondatabase/neon-pkgs:packages/oauth/src/mcp/mcp-auth.ts (audience = MCP endpoint URL)",
+      "note": "",
+      "audience": {
+        "mode": "enforced",
+        "testable": true,
+        "granted_by_default": false,
+        "default_secure": true,
+        "control_denied": true
+      },
+      "issuer": {
+        "mode": "unknown",
+        "testable": false,
+        "granted_by_default": null,
+        "default_secure": null,
+        "control_denied": null
+      }
+    },
+    {
+      "name": "clerk/mcp-tools",
+      "kind": "library",
+      "source": "clerk/mcp-tools:bearer-auth.ts (rejects token whose aud does not include the request origin)",
+      "note": "",
+      "audience": {
+        "mode": "enforced",
+        "testable": true,
+        "granted_by_default": false,
+        "default_secure": true,
+        "control_denied": true
+      },
+      "issuer": {
+        "mode": "unknown",
+        "testable": false,
+        "granted_by_default": null,
+        "default_secure": null,
+        "control_denied": null
+      }
+    },
+    {
+      "name": "wille/mcp-oauth-server",
+      "kind": "library",
+      "source": "wille/mcp-oauth-server:src/middleware/bearerAuth.ts (audience validated only when `resource` is set)",
+      "note": "audience binding is conditional on an opt-in option",
+      "audience": {
+        "mode": "opt-in",
+        "testable": true,
+        "granted_by_default": true,
+        "default_secure": false,
+        "control_denied": true
+      },
+      "issuer": {
+        "mode": "unknown",
+        "testable": false,
+        "granted_by_default": null,
+        "default_secure": null,
+        "control_denied": null
+      }
+    },
+    {
+      "name": "XTM-One-Platform/xtm-one",
+      "kind": "hand-rolled-jwt",
+      "source": "XTM-One-Platform/xtm-one:backend/app/api/v1/mcp_auth.py (jwt.decode verify_aud=False; custom match gated by require_audience=False default)",
+      "note": "verify_aud disabled; audience only enforced when require_audience is explicitly set",
+      "audience": {
+        "mode": "opt-in",
+        "testable": true,
+        "granted_by_default": true,
+        "default_secure": false,
+        "control_denied": true
+      },
+      "issuer": {
+        "mode": "unknown",
+        "testable": false,
+        "granted_by_default": null,
+        "default_secure": null,
+        "control_denied": null
+      }
+    },
+    {
+      "name": "confirm/tino",
+      "kind": "hand-rolled-jwt",
+      "source": "confirm/tino:tino/mcp/server.py (options verify_aud = self._audience is not None; audience defaults to None)",
+      "note": "issuer always validated; audience only when configured",
+      "audience": {
+        "mode": "opt-in",
+        "testable": true,
+        "granted_by_default": true,
+        "default_secure": false,
+        "control_denied": true
+      },
+      "issuer": {
+        "mode": "enforced",
+        "testable": true,
+        "granted_by_default": false,
+        "default_secure": true,
+        "control_denied": true
+      }
+    },
+    {
+      "name": "rededis/dataverse-mcp-server",
+      "kind": "sdk-delegated",
+      "source": "rededis/dataverse-mcp-server:src/server/tokens.ts (delegates to SDK OAuthTokenVerifier \u2014 inherits the SDK default)",
+      "note": "inherits @modelcontextprotocol/sdk audience default",
+      "audience": {
+        "mode": "opt-in",
+        "testable": true,
+        "granted_by_default": true,
+        "default_secure": false,
+        "control_denied": true
+      },
+      "issuer": {
+        "mode": "unknown",
+        "testable": false,
+        "granted_by_default": null,
+        "default_secure": null,
+        "control_denied": null
+      }
+    },
+    {
+      "name": "@modelcontextprotocol/sdk (default path)",
+      "kind": "sdk-default",
+      "source": "CVE-2026-111771 / GHSA-rvq5-wwqv-78pq; Tachyonic MCP-SDK audit (AccessToken.resource parsed-but-unchecked; IntrospectionTokenVerifier.validate_resource=False)",
+      "note": "the archetype: the SDK default is audience-off, which downstream servers inherit",
+      "audience": {
+        "mode": "opt-in",
+        "testable": true,
+        "granted_by_default": true,
+        "default_secure": false,
+        "control_denied": true
+      },
+      "issuer": {
+        "mode": "unknown",
+        "testable": false,
+        "granted_by_default": null,
+        "default_secure": null,
+        "control_denied": null
+      }
+    },
+    {
+      "name": "FireBird-Technologies/NotestackAI",
+      "kind": "symmetric-secret",
+      "source": "FireBird-Technologies/NotestackAI:backend/app/mcp/tokens.py (HS256 shared secret; self-minted tokens \u2014 binds aud, but cross-service forgery needs the secret)",
+      "note": "",
+      "audience": {
+        "mode": "na",
+        "testable": false,
+        "granted_by_default": null,
+        "default_secure": null,
+        "control_denied": null
+      },
+      "issuer": {
+        "mode": "na",
+        "testable": false,
+        "granted_by_default": null,
+        "default_secure": null,
+        "control_denied": null
+      }
+    },
+    {
+      "name": "zomer-g/ckan-version-tracker",
+      "kind": "symmetric-secret",
+      "source": "zomer-g/ckan-version-tracker:app/mcp/auth.py (HS256 shared secret, audience=MCP_JWT_AUDIENCE)",
+      "note": "",
+      "audience": {
+        "mode": "na",
+        "testable": false,
+        "granted_by_default": null,
+        "default_secure": null,
+        "control_denied": null
+      },
+      "issuer": {
+        "mode": "na",
+        "testable": false,
+        "granted_by_default": null,
+        "default_secure": null,
+        "control_denied": null
+      }
+    },
+    {
+      "name": "Azure-Samples/remote-mcp-webapp-python-auth-oauth",
+      "kind": "symmetric-secret",
+      "source": "Azure-Samples/remote-mcp-webapp-python-auth-oauth:mcp_auth.py (HS256 shared secret; no aud check)",
+      "note": "",
+      "audience": {
+        "mode": "na",
+        "testable": false,
+        "granted_by_default": null,
+        "default_secure": null,
+        "control_denied": null
+      },
+      "issuer": {
+        "mode": "na",
+        "testable": false,
+        "granted_by_default": null,
+        "default_secure": null,
+        "control_denied": null
+      }
+    },
+    {
+      "name": "lancejames221b/agent-hivemind",
+      "kind": "symmetric-secret",
+      "source": "lancejames221b/agent-hivemind:src/http_mcp_server.py (HS256 shared secret; no aud check)",
+      "note": "",
+      "audience": {
+        "mode": "na",
+        "testable": false,
+        "granted_by_default": null,
+        "default_secure": null,
+        "control_denied": null
+      },
+      "issuer": {
+        "mode": "na",
+        "testable": false,
+        "granted_by_default": null,
+        "default_secure": null,
+        "control_denied": null
+      }
+    },
+    {
+      "name": "gianpierobozza/vikunja-mcp-http",
+      "kind": "static-bearer",
+      "source": "gianpierobozza/vikunja-mcp-http:src/auth.ts (requireBearerAuth compares a static token \u2014 no JWT/audience concept)",
+      "note": "",
+      "audience": {
+        "mode": "na",
+        "testable": false,
+        "granted_by_default": null,
+        "default_secure": null,
+        "control_denied": null
+      },
+      "issuer": {
+        "mode": "na",
+        "testable": false,
+        "granted_by_default": null,
+        "default_secure": null,
+        "control_denied": null
+      }
+    },
+    {
+      "name": "pnocera/bookstack-mcp-server",
+      "kind": "static-bearer",
+      "source": "pnocera/bookstack-mcp-server:src/server.ts (requireBearerAuth compares a static expected token)",
+      "note": "",
+      "audience": {
+        "mode": "na",
+        "testable": false,
+        "granted_by_default": null,
+        "default_secure": null,
+        "control_denied": null
+      },
+      "issuer": {
+        "mode": "na",
+        "testable": false,
+        "granted_by_default": null,
+        "default_secure": null,
+        "control_denied": null
+      }
+    }
+  ]
+}
