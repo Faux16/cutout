@@ -1068,6 +1068,65 @@ _DEFAULT_CORPUS = Path(__file__).resolve().parent.parent / (
 )
 
 
+def _run_target_probe(
+    target: str, token: str | None, foreign_token: str | None, out: Path | None
+) -> None:
+    """Live-probe one authorized MCP server for auth conformance and render the result."""
+    import json as _json
+
+    from cutout.auth_target import probe_target
+
+    try:
+        probe = asyncio.run(probe_target(target, valid_token=token, foreign_token=foreign_token))
+    except Exception as exc:  # surface any transport failure cleanly
+        err_console.print(f"[red]error:[/red] {type(exc).__name__}: {exc}")
+        err_console.print(f"[dim]could not reach target {target}; is it up and authorized?[/dim]")
+        raise typer.Exit(code=1) from exc
+
+    console.print(
+        Panel(
+            f"[bold]live auth-conformance probe[/bold]\n"
+            f"target: [cyan]{probe.url}[/cyan]\n"
+            "[dim]Authorized use only. Unauthenticated checks are benign; token checks use "
+            "credentials you supplied for your own server.[/dim]",
+            title="auth-conformance --target",
+            expand=False,
+        )
+    )
+
+    def _verdict(ok: bool | None) -> str:
+        if ok is None:
+            return "[dim]n/a[/dim]"
+        return "[green]pass[/green]" if ok else "[red]FAIL[/red]"
+
+    table = Table(title="observable conformance")
+    table.add_column("check", style="cyan")
+    table.add_column("verdict")
+    table.add_column("detail", style="dim")
+    table.add_row("RFC 9728 discovery", _verdict(probe.discovery_ok), probe.discovery_detail)
+    table.add_row("RFC 6750 / MCP challenge", _verdict(probe.challenge_ok), probe.challenge_detail)
+    table.add_row("auth required", _verdict(probe.auth_required), "")
+    if probe.binding_tested:
+        table.add_row(
+            "foreign token rejected (RFC 8707/9207)",
+            _verdict(probe.foreign_rejected),
+            probe.foreign_detail,
+        )
+    if probe.valid_accepted is not None:
+        table.add_row(
+            "valid token accepted (control)", _verdict(probe.valid_accepted), probe.valid_detail
+        )
+    console.print(table)
+    for note in probe.notes:
+        style = "red" if ("EXPOSED" in note or "no OAuth" in note) else "yellow"
+        console.print(f"[{style}]• {note}[/{style}]")
+
+    if out is not None:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(_json.dumps(probe.to_dict(), indent=2) + "\n", encoding="utf-8")
+        console.print(f"[dim]result written to {out}[/dim]")
+
+
 @app.command("auth-conformance")
 def auth_conformance_cmd(
     corpus: Path = typer.Option(
@@ -1079,18 +1138,41 @@ def auth_conformance_cmd(
     transcript: Path | None = typer.Option(
         None, "--transcript", help="Evidence JSONL path (per-fixture probe cells)."
     ),
+    target: str | None = typer.Option(
+        None,
+        "--target",
+        help="Live-probe an AUTHORIZED running MCP server (mcp://… or https://…/mcp) instead of "
+        "the corpus. Authorized use only — your own server.",
+    ),
+    token: str | None = typer.Option(
+        None,
+        "--token",
+        envvar="CUTOUT_TARGET_TOKEN",
+        help="Live: a VALID bearer token for --target (control). Or env CUTOUT_TARGET_TOKEN.",
+    ),
+    foreign_token: str | None = typer.Option(
+        None,
+        "--foreign-token",
+        envvar="CUTOUT_TARGET_FOREIGN_TOKEN",
+        help="Live: a token you are authorized to use that was issued for ANOTHER audience/issuer "
+        "— the binding test. Or env CUTOUT_TARGET_FOREIGN_TOKEN.",
+    ),
 ) -> None:
-    """Measure MCP OAuth auth-conformance (RFC 8707 audience, RFC 9207 issuer) across a corpus.
+    """Measure MCP OAuth auth-conformance (RFC 8707 audience, RFC 9207 issuer).
 
-    Each surveyed server is probed by `standin` (audience) and `shellgame` (issuer) against its
-    as-shipped default posture; the headline is the default-secure rate — how many reject a
-    cross-audience / untrusted-issuer token with no extra configuration. Offline and
-    deterministic. Authorized use only (see ETHICS.md).
+    Default: score the offline corpus — each surveyed server probed by `standin` (audience) and
+    `shellgame` (issuer) for its as-shipped default-secure posture. With `--target`, live-probe
+    one authorized running server for RFC 9728 discovery + RFC 6750/MCP challenge, and (with
+    `--foreign-token`) the actual audience/issuer binding. Authorized use only (see ETHICS.md).
     """
     import json as _json
 
     from cutout.auth_conformance import DimensionResult, load_corpus, run_auth_conformance
     from cutout.engine.evidence import EvidenceWriter
+
+    if target is not None:
+        _run_target_probe(target, token, foreign_token, out)
+        return
 
     try:
         fixtures = load_corpus(corpus)
