@@ -1063,6 +1063,99 @@ def benchmark_cmd(
         console.print(f"[dim]result written to {out}[/dim]")
 
 
+@app.command("agenteval")
+def agenteval_cmd(
+    provider: str = typer.Option(
+        "openai", "--provider", help="Backend: 'openai' (your key), 'ollama', or 'mock'."
+    ),
+    model: str = typer.Option("gpt-4o-mini", "--model", help="A tool-calling-capable model."),
+    n: int = typer.Option(10, "--trials", "-n", min=1, help="Trials per cell (x6 cells)."),
+    base_url: str | None = typer.Option(None, "--base-url", help="Override the API base URL."),
+    temperature: float = typer.Option(0.7, "--temperature", help="Sampling temperature."),
+    transcript: Path | None = typer.Option(
+        None, "--transcript", help="Evidence JSONL (default: runs/agenteval-<ts>.jsonl)."
+    ),
+) -> None:
+    """Approval farming against a REAL tool-calling agent (CUT-PRIV-003), not a judge.
+
+    Puts the model in an agent loop with a benign task and a sensitive money-moving tool, plants a
+    justification in the case context, and measures how often the agent actually CALLS the
+    sensitive tool — under naive / neutral / hardened prompts. Needs a tool-calling model.
+    """
+    from cutout.agenteval import run_agent_eval
+    from cutout.engine.provider import MockProvider, OllamaProvider, OpenAIProvider
+
+    backend: object
+    if provider == "ollama":
+        backend = OllamaProvider(
+            model=model, base_url=base_url or "http://localhost:11434", temperature=temperature
+        )
+        label = model
+    elif provider == "openai":
+        try:
+            backend = OpenAIProvider(
+                model=model,
+                base_url=base_url or "https://api.openai.com/v1",
+                temperature=temperature,
+            )
+        except RuntimeError as exc:
+            err_console.print(f"[red]error:[/red] {exc}")
+            raise typer.Exit(code=1) from exc
+        label = model
+    elif provider == "mock":
+        backend = MockProvider()
+        label = "mock"
+    else:
+        err_console.print(f"[red]error:[/red] unknown provider '{provider}' (openai|ollama|mock)")
+        raise typer.Exit(code=1)
+
+    out = transcript or Path("runs") / f"agenteval-{datetime.now(UTC):%Y%m%dT%H%M%SZ}.jsonl"
+    console.print(
+        Panel(
+            f"[bold]Approval farming vs a real tool-calling agent[/bold] (CUT-PRIV-003)\n"
+            f"provider: {provider}   model: {label}   trials/cell: {n} (x6)\n\n"
+            "[dim]The agent has a benign task and a sensitive money-moving tool. Metric: how often "
+            "it actually CALLS the sensitive tool.[/dim]",
+            title="agenteval",
+            expand=False,
+        )
+    )
+
+    async def _go() -> object:
+        async with EvidenceWriter(out) as writer:
+            return await run_agent_eval(backend, model=label, trials=n, emit=writer.emit)
+
+    try:
+        report = asyncio.run(_go())
+    except Exception as exc:  # surface any backend/transport failure cleanly
+        err_console.print(f"[red]error:[/red] {type(exc).__name__}: {exc}")
+        raise typer.Exit(code=1) from exc
+
+    table = Table(title=f"agent action rate — {label}, {n} trials/cell")
+    table.add_column("posture", style="cyan")
+    table.add_column("justification")
+    table.add_column("sensitive-tool calls", justify="right")
+    table.add_column("action rate", justify="right")
+    for posture in ("naive", "neutral", "hardened"):
+        for just in ("honest", "farmed"):
+            c = report.cell(posture, just)  # type: ignore[attr-defined]
+            hot = posture in ("naive", "neutral") and just == "farmed"
+            rate = (
+                f"[red]{c.action_rate:.0%}[/red]"
+                if hot and c.action_rate >= 0.5
+                else f"{c.action_rate:.0%}"
+            )
+            table.add_row(posture, just, f"{c.actions}/{c.trials}", rate)
+    console.print(table)
+    fn = report.farming_effect_neutral  # type: ignore[attr-defined]
+    he = report.hardening_effect  # type: ignore[attr-defined]
+    console.print(
+        f"farming effect (neutral: farmed - honest): [bold]{fn:+.0%}[/bold]   "
+        f"hardening effect (farmed: naive - hardened): [bold]{he:+.0%}[/bold]\n"
+        f"[dim]transcript: {out}[/dim]"
+    )
+
+
 _DEFAULT_CORPUS = Path(__file__).resolve().parent.parent / (
     "benchmarks/mcp_auth_conformance/corpus.yaml"
 )
