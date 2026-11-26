@@ -1063,6 +1063,97 @@ def benchmark_cmd(
         console.print(f"[dim]result written to {out}[/dim]")
 
 
+_DEFAULT_CORPUS = Path(__file__).resolve().parent.parent / (
+    "benchmarks/mcp_auth_conformance/corpus.yaml"
+)
+
+
+@app.command("auth-conformance")
+def auth_conformance_cmd(
+    corpus: Path = typer.Option(
+        _DEFAULT_CORPUS, "--corpus", help="Fixture corpus YAML (the surveyed servers)."
+    ),
+    out: Path | None = typer.Option(
+        None, "--out", help="Write the structured result JSON here (for comparison / the repo)."
+    ),
+    transcript: Path | None = typer.Option(
+        None, "--transcript", help="Evidence JSONL path (per-fixture probe cells)."
+    ),
+) -> None:
+    """Measure MCP OAuth auth-conformance (RFC 8707 audience, RFC 9207 issuer) across a corpus.
+
+    Each surveyed server is probed by `standin` (audience) and `shellgame` (issuer) against its
+    as-shipped default posture; the headline is the default-secure rate — how many reject a
+    cross-audience / untrusted-issuer token with no extra configuration. Offline and
+    deterministic. Authorized use only (see ETHICS.md).
+    """
+    import json as _json
+
+    from cutout.auth_conformance import DimensionResult, load_corpus, run_auth_conformance
+    from cutout.engine.evidence import EvidenceWriter
+
+    try:
+        fixtures = load_corpus(corpus)
+    except (OSError, ValueError) as exc:
+        err_console.print(f"[red]error:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    async def _go() -> object:
+        if transcript is not None:
+            async with EvidenceWriter(transcript) as writer:
+                return await run_auth_conformance(fixtures, emit=writer.emit)
+        return await run_auth_conformance(fixtures)
+
+    report = asyncio.run(_go())
+
+    console.print(
+        Panel(
+            f"[bold]MCP auth-conformance benchmark[/bold]\n"
+            f"corpus: {corpus.name}   fixtures: {len(fixtures)}\n"
+            "[dim]Each real server is probed for RFC 8707 audience binding and RFC 9207 issuer "
+            "validation under its as-shipped default. 'secure' = rejects the attack with no "
+            "extra config.[/dim]",
+            title="auth-conformance",
+            expand=False,
+        )
+    )
+
+    def _cell(dim: DimensionResult) -> str:
+        if not dim.testable:
+            return f"[dim]{dim.mode}[/dim]"
+        if dim.default_secure:
+            return f"[green]secure ({dim.mode})[/green]"
+        return f"[red]EXPOSED ({dim.mode})[/red]"
+
+    table = Table(title="auth-conformance by server")
+    table.add_column("server", style="cyan")
+    table.add_column("kind", style="dim")
+    table.add_column("audience (RFC 8707)")
+    table.add_column("issuer (RFC 9207)")
+    for r in report.results:  # type: ignore[attr-defined]
+        table.add_row(r.fixture.name, r.fixture.kind, _cell(r.audience), _cell(r.issuer))
+    console.print(table)
+
+    aud = report.audience_default_secure_rate  # type: ignore[attr-defined]
+    iss = report.issuer_default_secure_rate  # type: ignore[attr-defined]
+    at = report._testable_count("audience")  # type: ignore[attr-defined]
+    it = report._testable_count("issuer")  # type: ignore[attr-defined]
+    valid = report.instrument_valid  # type: ignore[attr-defined]
+    console.print(
+        f"audience default-secure: [bold]{aud:.0%}[/bold] of {at} testable   "
+        f"issuer default-secure: [bold]{iss:.0%}[/bold] of {it} testable   "
+        f"instrument valid (controls denied): {'yes' if valid else 'NO'}"
+    )
+
+    if out is not None:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(
+            _json.dumps(report.to_dict(), indent=2) + "\n",  # type: ignore[attr-defined]
+            encoding="utf-8",
+        )
+        console.print(f"[dim]result written to {out}[/dim]")
+
+
 @app.command("console")
 def console_cmd() -> None:
     """Launch the interactive msfconsole-style shell (persistent session state)."""

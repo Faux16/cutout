@@ -165,7 +165,7 @@ realizes or enables:
 |---|---|
 | **ASI01** Agent Goal Hijack | `coax` · `deaddrop` · `mockingbird` · `walkin` · `smuggler` |
 | **ASI02** Tool Misuse & Exploitation | `casing` · `recce` · `legend` · `puppet` · `heist` |
-| **ASI03** Identity & Privilege Abuse | `keyring` · `proxy` · `ladder` · `scion` · `dragnet` · `siphon` · `standin` · `shellgame` |
+| **ASI03** Identity & Privilege Abuse | `keyring` · `proxy` · `ladder` · `scion` · `dragnet` · `siphon` · `standin` · `shellgame` *(and the [MCP auth-conformance benchmark](benchmarks/mcp_auth_conformance/))* |
 | **ASI04** Agentic Supply Chain | `deepcover` · `turncoat` |
 | **ASI05** Unexpected Code Execution (RCE) | `frisk` · `breakout` |
 | **ASI06** Memory & Context Poisoning | `sleeper` · `revenant` · `handler` · `brushpass` |
@@ -214,6 +214,17 @@ and a `cutout benchmark` runner that scores any model's susceptibility and the m
 efficacy, with published baselines. See [benchmarks/approval_farming/](benchmarks/approval_farming/).
 Across the suite, `gpt-4o` holds the hard red line (0%) but is farmed to **100%** on every one of
 five borderline actions, while the risk-based hardened prompt drops all of them to **0%**.
+
+A second benchmark measures a protocol surface rather than a model. The **[MCP auth-conformance
+benchmark](benchmarks/mcp_auth_conformance/)** uses `standin` (RFC 8707 audience confusion) and
+`shellgame` (RFC 9207 issuer mix-up) as instruments to classify a corpus of **17 real MCP-OAuth
+servers** (source-surveyed, with citations) by their *as-shipped default* posture. The finding is
+not "servers can't check `aud`" — most can — but that the check is often **opt-in**: only
+**55%** of the audience-testable servers reject a cross-audience token by default, and *every*
+exposed one ships the check off (`require_audience=False`, `verify_aud` unset, the SDK's
+`validate_resource=False`) rather than lacking it. The class is public (CVE-2026-111771); the
+**default-secure prevalence** is the new, defender-actionable measurement. `cutout
+auth-conformance` runs it offline in milliseconds.
 
 ## Findings in the wild
 
