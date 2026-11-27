@@ -13,7 +13,14 @@ from .errors import (
 )
 from .evidence import EvidenceEvent, EvidenceSink, EvidenceWriter, Phase, read_events
 from .module import BaseModule, Module, ModuleSpec, Option
-from .provider import MockProvider, OllamaProvider, OpenAIProvider, Provider
+from .provider import (
+    MockProvider,
+    OllamaProvider,
+    OpenAIProvider,
+    Provider,
+    ToolCall,
+    ToolCallingProvider,
+)
 from .registry import (
     get_module,
     get_registry,
@@ -54,6 +61,8 @@ __all__ = [
     "RunResult",
     "Session",
     "TargetDescriptor",
+    "ToolCall",
+    "ToolCallingProvider",
     "get_module",
     "get_registry",
     "load_catalog",

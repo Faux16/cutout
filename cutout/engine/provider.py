@@ -12,10 +12,20 @@ the same :class:`Provider` protocol.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
-from typing import Protocol, runtime_checkable
+from dataclasses import dataclass, field
+from typing import Any, Protocol, runtime_checkable
 
 import httpx
+
+
+@dataclass(frozen=True, slots=True)
+class ToolCall:
+    """One tool invocation a model chose to make, given a task and the available tools."""
+
+    name: str
+    arguments: dict[str, Any] = field(default_factory=dict)
 
 
 @runtime_checkable
@@ -23,6 +33,20 @@ class Provider(Protocol):
     """Minimal async completion interface."""
 
     async def complete(self, prompt: str, *, system: str | None = None) -> str: ...
+
+
+@runtime_checkable
+class ToolCallingProvider(Protocol):
+    """A provider that can drive a model as a tool-calling agent.
+
+    ``messages`` are OpenAI-style ``{role, content}`` dicts; ``tools`` are OpenAI-style tool
+    definitions. Returns the tool calls the model chose to make this turn (possibly none) — which
+    is what the agent-realism eval measures: does the agent actually *call* the sensitive tool?
+    """
+
+    async def act(
+        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
+    ) -> list[ToolCall]: ...
 
 
 class MockProvider:
@@ -42,6 +66,11 @@ class MockProvider:
         seed = f"{system or ''}\x00{prompt}".encode()
         digest = hashlib.sha256(seed).hexdigest()[:12]
         return f"[mock:{digest}] acknowledged"
+
+    async def act(
+        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
+    ) -> list[ToolCall]:
+        return []  # the deterministic mock never calls a tool; tests use a scripted provider
 
 
 class OllamaProvider:
@@ -83,6 +112,32 @@ class OllamaProvider:
             body = resp.json()
         content = body.get("message", {}).get("content", "")
         return str(content)
+
+    async def act(
+        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
+    ) -> list[ToolCall]:
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "tools": tools,
+            "stream": False,
+            "options": {"temperature": self.temperature},
+        }
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            resp = await client.post(f"{self.base_url}/api/chat", json=payload)
+            resp.raise_for_status()
+            body = resp.json()
+        calls: list[ToolCall] = []
+        for tc in body.get("message", {}).get("tool_calls") or []:
+            fn = tc.get("function", {})
+            args = fn.get("arguments") or {}
+            if isinstance(args, str):
+                try:
+                    args = json.loads(args)
+                except json.JSONDecodeError:
+                    args = {}
+            calls.append(ToolCall(name=str(fn.get("name", "")), arguments=dict(args)))
+        return calls
 
 
 class OpenAIProvider:
@@ -128,3 +183,31 @@ class OpenAIProvider:
             resp.raise_for_status()
             body = resp.json()
         return str(body["choices"][0]["message"]["content"])
+
+    async def act(
+        self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]
+    ) -> list[ToolCall]:
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "tools": tools,
+            "tool_choice": "auto",
+            "temperature": self.temperature,
+        }
+        headers = {"Authorization": f"Bearer {self.api_key}"}
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            resp = await client.post(
+                f"{self.base_url}/chat/completions", json=payload, headers=headers
+            )
+            resp.raise_for_status()
+            body = resp.json()
+        message = body["choices"][0]["message"]
+        calls: list[ToolCall] = []
+        for tc in message.get("tool_calls") or []:
+            fn = tc.get("function", {})
+            try:
+                args = json.loads(fn.get("arguments") or "{}")
+            except json.JSONDecodeError:
+                args = {}
+            calls.append(ToolCall(name=str(fn.get("name", "")), arguments=dict(args)))
+        return calls
