@@ -62,6 +62,73 @@ def _mcp_url(base: str) -> str:
     return f"{base.rstrip('/')}/mcp"
 
 
+def oauth_app() -> FastAPI:
+    """The networked OAuth surface — the MCP 2026-07-28 auth target (CUT-EXEC-005 / CUT-CRED-004).
+
+    Wraps the same :func:`~cutout_range.mcp_auth.build_auth_world` the in-process range uses, so a
+    token minted here and replayed against the vulnerable ``customer-records`` resource server is
+    honored (no RFC 8707 audience validation), while the ``customer-records-strict`` control
+    rejects it — and a client that skips RFC 9207 issuer validation leaks its code to the attacker
+    AS. One world per process, so the attacker AS's captured codes persist across requests.
+    """
+    from dataclasses import asdict
+
+    from cutout_range.mcp_auth import AuthCode, AuthResponse, Client, Token, build_auth_world
+
+    honest, evil, servers = build_auth_world()
+    issuers = {honest.issuer: honest, evil.issuer: evil}
+    app = FastAPI(title="cutout-range: oauth")
+
+    @app.get("/healthz")
+    async def healthz() -> dict[str, Any]:
+        return {"ok": True, "role": "oauth"}
+
+    @app.post("/mint_token")
+    async def mint_token(body: dict[str, Any]) -> dict[str, Any]:
+        return asdict(honest.mint(str(body.get("audience", "notes-api"))))
+
+    @app.post("/issue_auth_code")
+    async def issue_auth_code(body: dict[str, Any]) -> dict[str, Any]:
+        return asdict(honest.authorize(str(body.get("audience", "customer-records-api"))))
+
+    @app.get("/attacker_issuer")
+    async def attacker_issuer() -> dict[str, Any]:
+        return {"issuer": evil.issuer}
+
+    @app.post("/present_token")
+    async def present_token(body: dict[str, Any]) -> dict[str, Any]:
+        server = servers.get(str(body.get("server_id")))
+        if server is None:
+            return {"ok": False, "error": f"no such resource server '{body.get('server_id')}'"}
+        tok = body.get("token")
+        return server.access(Token(**tok) if tok else None)
+
+    @app.post("/complete_oauth")
+    async def complete_oauth(body: dict[str, Any]) -> dict[str, Any]:
+        resp = body["response"]
+        response = AuthResponse(code=AuthCode(**resp["code"]), iss=str(resp["iss"]))
+        client = Client(expected_issuer=honest.issuer, validate_iss=bool(body.get("validate_iss")))
+        return client.complete(response, issuers)
+
+    @app.get("/evil_captured")
+    async def evil_captured() -> dict[str, Any]:
+        return {"codes": [asdict(c) for c in evil.captured]}
+
+    @app.post("/redeem_code")
+    async def redeem_code(body: dict[str, Any]) -> dict[str, Any] | None:
+        token = honest.redeem(AuthCode(**body["code"]))
+        return asdict(token) if token else None
+
+    @app.get("/resource_servers")
+    async def resource_servers() -> dict[str, Any]:
+        return {
+            sid: {"audience": s.audience, "validate_audience": s.validate_audience}
+            for sid, s in servers.items()
+        }
+
+    return app
+
+
 def corpus_app(state_dir: str | None = None) -> FastAPI:
     app = FastAPI(title="cutout-range: rag-corpus")
     state_path = f"{state_dir}/corpus.json" if state_dir else None
@@ -227,6 +294,7 @@ def orchestrator_app(settings: Settings) -> FastAPI:
             "servers": settings.advertised_servers,
             "corpus_url": settings.advertised_corpus_url,
             "agents": settings.advertised_agents,
+            "oauth_url": settings.advertised_oauth_url,
             "tools": tools,
         }
 

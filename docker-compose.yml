@@ -80,6 +80,14 @@ services:
     environment:
       CUTOUT_RANGE_CUSTOMER_DATA_URL: http://customer-data:8611
 
+  # oauth: the MCP 2026-07-28 auth surface — an honest + attacker authorization server and three
+  # resource servers (one vulnerable: no RFC 8707 audience validation). standin (CUT-EXEC-005) and
+  # shellgame (CUT-CRED-004) target it.
+  oauth:
+    <<: *image
+    command: uvicorn cutout_range.service.servers.oauth:app --host 0.0.0.0 --port 8620
+    ports: ["8620:8620"]
+
   orchestrator:
     <<: *image
     command: uvicorn cutout_range.service.servers.orchestrator:app --host 0.0.0.0 --port 8600
@@ -93,6 +101,7 @@ services:
       - support-agent
       - notes-helper
       - directory
+      - oauth
     environment:
       # Internal service-DNS URLs the orchestrator uses to reach peers.
       CUTOUT_RANGE_CUSTOMER_DATA_URL: http://customer-data:8611
@@ -103,6 +112,7 @@ services:
       CUTOUT_RANGE_DIRECTORY_URL: http://directory:8619
       CUTOUT_RANGE_BILLING_AGENT_URL: http://billing-agent:8616
       CUTOUT_RANGE_SUPPORT_AGENT_URL: http://support-agent:8617
+      CUTOUT_RANGE_OAUTH_URL: http://oauth:8620
       # Host-reachable URLs advertised to the attacker via /topology.
       CUTOUT_RANGE_ADVERTISE_CUSTOMER_DATA_URL: http://127.0.0.1:8611
       CUTOUT_RANGE_ADVERTISE_FS_TOOLS_URL: http://127.0.0.1:8612
@@ -112,3 +122,4 @@ services:
       CUTOUT_RANGE_ADVERTISE_DIRECTORY_URL: http://127.0.0.1:8619
       CUTOUT_RANGE_ADVERTISE_BILLING_AGENT_URL: http://127.0.0.1:8616
       CUTOUT_RANGE_ADVERTISE_SUPPORT_AGENT_URL: http://127.0.0.1:8617
+      CUTOUT_RANGE_ADVERTISE_OAUTH_URL: http://127.0.0.1:8620
