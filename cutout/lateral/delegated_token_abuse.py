@@ -46,6 +46,7 @@ import inspect
 from typing import Any
 
 from cutout_range import connect_range
+from cutout_range.tool_servers import ToolSpec
 
 from cutout.engine.evidence import Phase
 from cutout.engine.module import BaseModule, Option
@@ -126,13 +127,26 @@ class DelegatedTokenAbuse(BaseModule):
         return res  # type: ignore[no-any-return]
 
     def _gated_tool(self, rng: Any) -> Any | None:
-        """Find the delegated-token-gated (``sensitive``) tool on the target agent."""
+        """Find the delegated-token-gated (``sensitive``) tool on the target agent.
+
+        In-process the agent is an object we can introspect; against a networked range the
+        agents map holds URL strings (the agent's tools are behind its own trust zone and not
+        in the orchestrator topology), so we trust the configured ``secret_tool`` as the gate.
+        """
         agent = getattr(rng, "agents", {}).get(self._opt("agent"))
         if agent is None:
             return None
         want = self._opt("secret_tool")
+        lister = getattr(agent, "list_tools", None)
+        if not callable(lister):  # networked: agent is a URL string
+            return ToolSpec(
+                server=self._opt("agent"),
+                name=want,
+                description="delegated-token-gated tool",
+                sensitive=True,
+            )
         sensitive = None
-        for spec in agent.list_tools():
+        for spec in lister():
             if spec.name == want and getattr(spec, "sensitive", False):
                 return spec
             if getattr(spec, "sensitive", False) and sensitive is None:

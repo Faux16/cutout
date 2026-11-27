@@ -286,9 +286,10 @@ docker compose down
 ```
 
 The `--target` URL is the only thing that changes; the RAG/memory state persists server-side
-between runs. **18 of the 33 techniques land against the networked stack** (the full chain); the
-rest — the interpreter, OAuth-auth, approval-gate and in-process-mesh surfaces — are in-process
-only. See **[cutout_range/README.md](cutout_range/README.md)** for the service map and the exact
+between runs. **24 of the 33 techniques land against the networked stack** — the full chain plus
+the MCP 2026-07-28 OAuth auth lane (`standin`/`shellgame`, via the `oauth` service); the other 9 —
+the interpreter, approval-gate, sub-agent and in-process-mesh surfaces — are in-process only. See
+**[cutout_range/README.md](cutout_range/README.md)** for the service map and the exact
 per-technique coverage.
 
 ## How it works

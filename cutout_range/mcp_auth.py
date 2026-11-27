@@ -139,3 +139,44 @@ class ResourceServer:
                 ),
             }
         return {"ok": True, "data": dict(self.data)}
+
+
+EVIL_ISSUER = "https://evil-as.attacker.example"
+_DEFAULT_RECORDS = {"id": "VIP-001", "api_secret": "cutrange_FAKE_secret_VIP001_do_not_use"}
+
+
+def build_auth_world() -> tuple[AuthServer, AuthServer, dict[str, ResourceServer]]:
+    """The range's OAuth world: an honest AS, an attacker-controlled AS, and three resource
+    servers — a hardened ``notes-api``, a **vulnerable** ``customer-records`` (no audience
+    validation — the CUT-EXEC-005 target), and a ``customer-records-strict`` control. Shared by
+    the in-process :class:`~cutout_range.range.Range` and the networked ``oauth`` service so both
+    targets behave identically.
+    """
+    honest = AuthServer()
+    evil = AuthServer(issuer=EVIL_ISSUER)
+    servers = {
+        s.id: s
+        for s in (
+            ResourceServer(
+                "notes-api",
+                audience="notes-api",
+                data={"notes": "shared team notes"},
+                validate_audience=True,
+                trusted_issuer=honest.issuer,
+            ),
+            ResourceServer(
+                "customer-records",
+                audience="customer-records-api",
+                data=dict(_DEFAULT_RECORDS),
+                validate_audience=False,  # non-compliant: accepts any audience (the flaw)
+            ),
+            ResourceServer(
+                "customer-records-strict",
+                audience="customer-records-api",
+                data=dict(_DEFAULT_RECORDS),
+                validate_audience=True,
+                trusted_issuer=honest.issuer,
+            ),
+        )
+    }
+    return honest, evil, servers
