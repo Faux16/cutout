@@ -12,6 +12,8 @@ downstream tool-server and RAG-corpus URLs (recon), which the client then attack
 from __future__ import annotations
 
 import time
+from dataclasses import asdict
+from types import SimpleNamespace
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -20,6 +22,7 @@ import httpx
 from .agent import A2AResult, OrchestratorResult
 from .corpus import Document
 from .hosts import HostInfo
+from .mcp_auth import AuthCode, AuthResponse, Token
 from .memory import MemoryNote
 from .ticketing import Ticket
 from .tool_servers import ToolSpec
@@ -124,9 +127,82 @@ class RemoteRange:
         self._tools = [ToolSpec.model_validate(t) for t in data["tools"]]
         self.corpus = RemoteCorpus(self.corpus_url)
         self.orchestrator = RemoteOrchestrator(self.base_url)
+        # OAuth surface (CUT-EXEC-005 / CUT-CRED-004). Bind the auth methods only when the stack
+        # advertises an oauth service, so against a stack without one the modules skip cleanly
+        # (their `hasattr(rng, "mint_token")` guard stays False) exactly as the in-process range.
+        oauth = data.get("oauth_url")
+        if oauth:
+            self._oauth_url = str(oauth).rstrip("/")
+            self.mint_token = self._mint_token
+            self.present_token = self._present_token
+            self.issue_auth_code = self._issue_auth_code
+            self.attacker_issuer = self._attacker_issuer
+            self.complete_oauth = self._complete_oauth
+            self.evil_captured = self._evil_captured
+            self.redeem_code = self._redeem_code
+            self.resource_servers = self._fetch_resource_servers()
 
     def list_tools(self) -> list[ToolSpec]:
         return list(self._tools)
+
+    # ---- OAuth surface (CUT-EXEC-005 standin / CUT-CRED-004 shellgame), over HTTP ----
+    def _fetch_resource_servers(self) -> dict[str, Any]:
+        resp = httpx.get(f"{self._oauth_url}/resource_servers", timeout=_TIMEOUT)
+        resp.raise_for_status()
+        return {sid: SimpleNamespace(**cfg) for sid, cfg in resp.json().items()}
+
+    def _mint_token(self, audience: str = "notes-api") -> Token:
+        resp = httpx.post(
+            f"{self._oauth_url}/mint_token", json={"audience": audience}, timeout=_TIMEOUT
+        )
+        resp.raise_for_status()
+        return Token(**resp.json())
+
+    def _present_token(self, server_id: str, token: Token) -> dict[str, Any]:
+        resp = httpx.post(
+            f"{self._oauth_url}/present_token",
+            json={"server_id": server_id, "token": asdict(token)},
+            timeout=_TIMEOUT,
+        )
+        resp.raise_for_status()
+        return dict(resp.json())
+
+    def _issue_auth_code(self, audience: str = "customer-records-api") -> AuthCode:
+        resp = httpx.post(
+            f"{self._oauth_url}/issue_auth_code", json={"audience": audience}, timeout=_TIMEOUT
+        )
+        resp.raise_for_status()
+        return AuthCode(**resp.json())
+
+    def _attacker_issuer(self) -> str:
+        resp = httpx.get(f"{self._oauth_url}/attacker_issuer", timeout=_TIMEOUT)
+        resp.raise_for_status()
+        return str(resp.json()["issuer"])
+
+    def _complete_oauth(self, response: AuthResponse, *, validate_iss: bool) -> dict[str, Any]:
+        resp = httpx.post(
+            f"{self._oauth_url}/complete_oauth",
+            json={
+                "response": {"code": asdict(response.code), "iss": response.iss},
+                "validate_iss": validate_iss,
+            },
+            timeout=_TIMEOUT,
+        )
+        resp.raise_for_status()
+        return dict(resp.json())
+
+    def _evil_captured(self) -> list[AuthCode]:
+        resp = httpx.get(f"{self._oauth_url}/evil_captured", timeout=_TIMEOUT)
+        resp.raise_for_status()
+        return [AuthCode(**c) for c in resp.json()["codes"]]
+
+    def _redeem_code(self, code: AuthCode) -> Token | None:
+        resp = httpx.post(
+            f"{self._oauth_url}/redeem_code", json={"code": asdict(code)}, timeout=_TIMEOUT
+        )
+        resp.raise_for_status()
+        body = resp.json()
+        return Token(**body) if body else None
 
     def _probe_one(
         self, id: str, kind: str, endpoint: str, transport: str, probe_url: str | None = None

@@ -19,7 +19,7 @@ from .chat_target import MockChatAgent
 from .corpus import Document, RagCorpus
 from .guardrail import Guardrail, default_guardrail
 from .hosts import HostInfo
-from .mcp_auth import AuthCode, AuthResponse, AuthServer, Client, ResourceServer, Token
+from .mcp_auth import AuthCode, AuthResponse, Client, Token, build_auth_world
 from .memory import MemoryNote
 from .subagent import SubAgent
 from .ticketing import Ticket, TicketQueue
@@ -170,37 +170,10 @@ class Range:
         # audience-bound tokens; one high-value resource server is non-compliant (accepts any
         # token the AS issued — the token-passthrough / confused-deputy flaw, CUT-EXEC-005), and
         # its hardened twin validates audience + issuer (RFC 8707 / RFC 9207) as the control.
-        self.auth_server = AuthServer()
-        # An attacker-controlled authorization server — the other AS a client interacts with in an
-        # authorization-server mix-up (CUT-CRED-004). A client that does not validate the response
-        # issuer (RFC 9207) can be made to deliver the honest AS's code here.
-        self.evil_auth_server = AuthServer(issuer="https://evil-as.attacker.example")
-        _records = {"id": "VIP-001", "api_secret": "cutrange_FAKE_secret_VIP001_do_not_use"}
-        self.resource_servers: dict[str, ResourceServer] = {
-            s.id: s
-            for s in (
-                ResourceServer(
-                    "notes-api",
-                    audience="notes-api",
-                    data={"notes": "shared team notes"},
-                    validate_audience=True,
-                    trusted_issuer=self.auth_server.issuer,
-                ),
-                ResourceServer(
-                    "customer-records",
-                    audience="customer-records-api",
-                    data=dict(_records),
-                    validate_audience=False,  # non-compliant: accepts any audience (the flaw)
-                ),
-                ResourceServer(
-                    "customer-records-strict",
-                    audience="customer-records-api",
-                    data=dict(_records),
-                    validate_audience=True,
-                    trusted_issuer=self.auth_server.issuer,
-                ),
-            )
-        }
+        # The range's OAuth world (honest AS, attacker AS, and the three resource servers) — the
+        # CUT-EXEC-005 / CUT-CRED-004 surface. Built from the shared factory so the in-process
+        # range and the networked `oauth` service are identical.
+        self.auth_server, self.evil_auth_server, self.resource_servers = build_auth_world()
 
     def list_tools(self) -> list[ToolSpec]:
         specs: list[ToolSpec] = []

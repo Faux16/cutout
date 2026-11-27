@@ -55,6 +55,9 @@ class Settings:
     support_agent_url: str = field(
         default_factory=lambda: _env("CUTOUT_RANGE_SUPPORT_AGENT_URL", "http://127.0.0.1:8617")
     )
+    oauth_url: str = field(
+        default_factory=lambda: _env("CUTOUT_RANGE_OAUTH_URL", "http://127.0.0.1:8620")
+    )
     state_dir: str | None = field(
         default_factory=lambda: os.environ.get("CUTOUT_RANGE_STATE_DIR") or None
     )
@@ -88,6 +91,10 @@ class Settings:
     @property
     def advertised_corpus_url(self) -> str:
         return _env("CUTOUT_RANGE_ADVERTISE_RAG_CORPUS_URL", self.rag_corpus_url)
+
+    @property
+    def advertised_oauth_url(self) -> str:
+        return _env("CUTOUT_RANGE_ADVERTISE_OAUTH_URL", self.oauth_url)
 
     @property
     def advertised_agents(self) -> dict[str, str]:
