@@ -269,9 +269,12 @@ each map to a technique:
 **Offline, zero-dependency (default):** the modules drive the range as in-process Python
 objects. Nothing to start.
 
-**Networked, real MCP (`docker compose`):** the tool servers are genuine MCP servers
-(official SDK, streamable-http) with transport-level bearer auth; the orchestrator and
-billing-agent are MCP clients. Point any MCP client at them.
+The bullets above are the **full in-process model** — every one of the 33 techniques lands
+against it, offline. The networked stack below is the classic kill-chain **subset**.
+
+**Networked, real MCP (`docker compose`):** ten genuine MCP servers (official SDK,
+streamable-http) with transport-level bearer auth; the orchestrator and billing-agent are MCP
+clients. Point any MCP client at them.
 
 ```bash
 docker compose up --build -d
@@ -282,8 +285,11 @@ cutout run --target http://127.0.0.1:8600 CUT-LAT-001     # pivots to billing-ag
 docker compose down
 ```
 
-The `--target` URL is the only thing that changes; the same modules hit the live stack, and
-the RAG/memory state persists server-side between runs.
+The `--target` URL is the only thing that changes; the RAG/memory state persists server-side
+between runs. **18 of the 33 techniques land against the networked stack** (the full chain); the
+rest — the interpreter, OAuth-auth, approval-gate and in-process-mesh surfaces — are in-process
+only. See **[cutout_range/README.md](cutout_range/README.md)** for the service map and the exact
+per-technique coverage.
 
 ## How it works
 
